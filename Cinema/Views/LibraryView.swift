@@ -22,9 +22,8 @@ struct LibraryView: View {
 
     @Namespace private var namespace
 
-    /// Which slice of the library the grid shows: everything, movies, or shows.
+    /// Which slice of the library the grid shows: movies or shows.
     private enum LibraryFilter: String, CaseIterable, Identifiable {
-        case all
         case movies
         case shows
 
@@ -32,7 +31,6 @@ struct LibraryView: View {
 
         var displayName: String {
             switch self {
-            case .all: String(localized: "All")
             case .movies: String(localized: "Movies")
             case .shows: String(localized: "TV Shows")
             }
@@ -40,7 +38,7 @@ struct LibraryView: View {
     }
 
     @State private var navigationPath = [NavigationNode]()
-    @State private var filter: LibraryFilter = .all
+    @State private var filter: LibraryFilter = .movies
     @State private var selectedGenre: Genre?
     @State private var isPickingFile = false
     @State private var isAddingYouTubeVideo = false
@@ -76,22 +74,22 @@ struct LibraryView: View {
         }
     }
 
-    /// Movies and shows mixed alphabetically; a show's episodes group into one
-    /// card. The toolbar filter narrows the grid to one type.
+    /// The grid's cards for the selected type — movies, or shows with a show's
+    /// episodes grouped into one card — sorted alphabetically.
     private var libraryItems: [LibraryItem] {
         let videos = selectedGenre?.videos ?? allVideos
-        let movies = filter == .shows
-            ? []
-            : videos.filter { !$0.isEpisode }.map(LibraryItem.movie)
-        let shows = filter == .movies
-            ? []
-            : Dictionary(grouping: videos.filter(\.isEpisode)) { $0.showName ?? "" }
+        let items: [LibraryItem] = switch filter {
+        case .movies:
+            videos.filter { !$0.isEpisode }.map(LibraryItem.movie)
+        case .shows:
+            Dictionary(grouping: videos.filter(\.isEpisode)) { $0.showName ?? "" }
                 .map { name, episodes in
                     LibraryItem.show(name: name, episodes: episodes.sorted {
                         ($0.seasonNumber ?? 0, $0.episodeNumber ?? 0) < ($1.seasonNumber ?? 0, $1.episodeNumber ?? 0)
                     })
                 }
-        return (movies + shows).sorted { $0.sortKey.localizedStandardCompare($1.sortKey) == .orderedAscending }
+        }
+        return items.sorted { $0.sortKey.localizedStandardCompare($1.sortKey) == .orderedAscending }
     }
 
     var body: some View {
