@@ -5,7 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-08-15
+
+The discovery update: a TMDB-powered browsing layer woven into the library, plus a hardened import pipeline with tests and CI.
 
 ### Fixed
 - Importing large movies no longer gets the app killed by the platform memory limit: the chunked copy accumulated every chunk in an undrained autorelease pool, so a multi-gigabyte import ballooned memory until visionOS terminated the app (found on Vision Pro, `EXC_RESOURCE` at the 5GB limit; verified fixed on hardware with a 20GB import). The copy loop now drains a pool per chunk.
