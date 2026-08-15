@@ -178,6 +178,51 @@ extension TMDB {
         }
     }
 
+    /// One TV show in a person's filmography.
+    struct ShowCredit: Codable, Identifiable, Sendable {
+        let id: Int
+        let name: String
+        let character: String?
+        let firstAirDate: String?
+        let posterPath: String?
+        let backdropPath: String?
+        let overview: String?
+
+        var year: Int? {
+            firstAirDate.flatMap { Int($0.prefix(4)) }
+        }
+
+        var thumbnailURL: URL? {
+            posterPath.map { URL(string: "https://image.tmdb.org/t/p/w154\($0)")! }
+        }
+
+        /// The credit as a displayable show, for the shared show page.
+        var asShow: Show {
+            Show(
+                id: id,
+                name: name,
+                overview: overview ?? "",
+                firstAirDate: firstAirDate,
+                posterPath: posterPath,
+                backdropPath: backdropPath
+            )
+        }
+    }
+
+    /// The person's TV acting credits, deduplicated by show.
+    static func tvFilmography(forPersonID personID: Int) async throws -> [ShowCredit] {
+        struct CreditsResponse: Codable {
+            let cast: [ShowCredit]
+        }
+        let url = endpoint("/person/\(personID)/tv_credits", query: [
+            URLQueryItem(name: "language", value: Locale.preferredLanguages.first ?? "en-US")
+        ])
+        let (data, _) = try await URLSession.shared.data(from: url)
+        let credits = try decoder.decode(CreditsResponse.self, from: data).cast
+        var seen = Set<Int>()
+        return credits.filter { seen.insert($0.id).inserted }
+    }
+
     /// One episode's metadata from a season page.
     struct EpisodeInfo: Codable, Sendable {
         let episodeNumber: Int

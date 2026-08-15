@@ -9,9 +9,10 @@ import SwiftUI
 import SwiftData
 
 /// The sheet a cast-row tap presents: the person's page inside its own
-/// navigation stack, so filmography entries can push full movie pages.
+/// navigation stack, so filmography entries can push full movie and show pages.
 struct PersonSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Namespace private var namespace
 
     let person: TMDB.CreditedPerson
 
@@ -28,10 +29,15 @@ struct PersonSheet: View {
                 .navigationDestination(for: TMDB.Movie.self) { movie in
                     MoviePageView(movie: movie)
                 }
+                .navigationDestination(for: TMDB.Show.self) { show in
+                    ShowPageView(show: show)
+                }
                 // Owned movies open the library's own page…
                 .navigationDestination(for: Video.self) { video in
                     DetailView(video: video)
                 }
+                // …and owned shows the library's show page, episodes included.
+                .navigationDestinationVideo(in: namespace)
         }
         // …so this sheet steps aside when playback starts and the app's
         // root presents the player.
@@ -40,8 +46,62 @@ struct PersonSheet: View {
     }
 }
 
-/// The person's details and filmography. Movies already in the library sort
-/// first and carry a checkmark; the rest follow, newest releases first.
+/// One entry in a person's merged movie-and-TV filmography.
+private enum PersonCredit: Identifiable {
+    case movie(TMDB.FilmCredit)
+    case show(TMDB.ShowCredit)
+
+    var id: String {
+        switch self {
+        case .movie(let credit): "movie-\(credit.id)"
+        case .show(let credit): "show-\(credit.id)"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .movie(let credit): credit.title
+        case .show(let credit): credit.name
+        }
+    }
+
+    var year: Int? {
+        switch self {
+        case .movie(let credit): credit.year
+        case .show(let credit): credit.year
+        }
+    }
+
+    var character: String? {
+        switch self {
+        case .movie(let credit): credit.character
+        case .show(let credit): credit.character
+        }
+    }
+
+    var thumbnailURL: URL? {
+        switch self {
+        case .movie(let credit): credit.thumbnailURL
+        case .show(let credit): credit.thumbnailURL
+        }
+    }
+
+    var isShow: Bool {
+        if case .show = self { true } else { false }
+    }
+
+    /// Release or first-air date, for newest-first ordering.
+    var date: String {
+        switch self {
+        case .movie(let credit): credit.releaseDate ?? ""
+        case .show(let credit): credit.firstAirDate ?? ""
+        }
+    }
+}
+
+/// The person's details and filmography — movies and TV shows together.
+/// Titles already in the library sort first and carry a checkmark; the rest
+/// follow, newest releases first.
 private struct PersonPageView: View {
     let person: TMDB.CreditedPerson
 
@@ -49,23 +109,30 @@ private struct PersonPageView: View {
     @Query(filter: #Predicate<Video> { $0.tmdbID != nil })
     private var matchedVideos: [Video]
 
-    @State private var details: TMDB.PersonDetails?
-    @State private var filmography: [TMDB.FilmCredit] = []
+    @Query(filter: #Predicate<Video> { $0.tmdbShowID != nil })
+    private var matchedEpisodes: [Video]
 
-    private var libraryTMDBIDs: Set<Int> {
-        Set(matchedVideos.compactMap(\.tmdbID))
+    @State private var details: TMDB.PersonDetails?
+    @State private var movieCredits: [TMDB.FilmCredit] = []
+    @State private var showCredits: [TMDB.ShowCredit] = []
+
+    private func isOwned(_ credit: PersonCredit) -> Bool {
+        switch credit {
+        case .movie(let credit): matchedVideos.contains { $0.tmdbID == credit.id }
+        case .show(let credit): matchedEpisodes.contains { $0.tmdbShowID == credit.id }
+        }
     }
 
-    /// Library titles first, then everything else by release date, newest first.
-    private var sortedFilmography: [TMDB.FilmCredit] {
-        let owned = libraryTMDBIDs
-        return filmography.sorted { first, second in
-            let firstOwned = owned.contains(first.id)
-            let secondOwned = owned.contains(second.id)
+    /// Library titles first, then everything else by date, newest first.
+    private var sortedFilmography: [PersonCredit] {
+        let credits = movieCredits.map(PersonCredit.movie) + showCredits.map(PersonCredit.show)
+        return credits.sorted { first, second in
+            let firstOwned = isOwned(first)
+            let secondOwned = isOwned(second)
             if firstOwned != secondOwned {
                 return firstOwned
             }
-            return (first.releaseDate ?? "") > (second.releaseDate ?? "")
+            return first.date > second.date
         }
     }
 
@@ -113,18 +180,34 @@ private struct PersonPageView: View {
 
                     LazyVStack(spacing: Constants.cardSpacing) {
                         ForEach(sortedFilmography) { credit in
-                            // Owned movies open the library's detail page, ready
-                            // to play; the rest open their TMDB page.
-                            if let ownedVideo = matchedVideos.first(where: { $0.tmdbID == credit.id }) {
-                                NavigationLink(value: ownedVideo) {
-                                    FilmographyRow(credit: credit, isInLibrary: true)
+                            // Owned titles open the library's own pages, ready
+                            // to play; the rest open their TMDB pages.
+                            switch credit {
+                            case .movie(let movieCredit):
+                                if let ownedVideo = matchedVideos.first(where: { $0.tmdbID == movieCredit.id }) {
+                                    NavigationLink(value: ownedVideo) {
+                                        FilmographyRow(credit: credit, isInLibrary: true)
+                                    }
+                                    .buttonStyle(.plain)
+                                } else {
+                                    NavigationLink(value: movieCredit.asMovie) {
+                                        FilmographyRow(credit: credit, isInLibrary: false)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
-                                .buttonStyle(.plain)
-                            } else {
-                                NavigationLink(value: credit.asMovie) {
-                                    FilmographyRow(credit: credit, isInLibrary: false)
+
+                            case .show(let showCredit):
+                                if let showName = matchedEpisodes.first(where: { $0.tmdbShowID == showCredit.id })?.showName {
+                                    NavigationLink(value: NavigationNode.show(showName)) {
+                                        FilmographyRow(credit: credit, isInLibrary: true)
+                                    }
+                                    .buttonStyle(.plain)
+                                } else {
+                                    NavigationLink(value: showCredit.asShow) {
+                                        FilmographyRow(credit: credit, isInLibrary: false)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
-                                .buttonStyle(.plain)
                             }
                         }
                     }
@@ -135,17 +218,19 @@ private struct PersonPageView: View {
         .navigationTitle("")
         .task(id: person.personID) {
             async let personDetails = TMDB.person(forID: person.personID)
-            async let credits = TMDB.filmography(forPersonID: person.personID)
+            async let movies = TMDB.filmography(forPersonID: person.personID)
+            async let shows = TMDB.tvFilmography(forPersonID: person.personID)
             details = try? await personDetails
-            filmography = (try? await credits) ?? []
+            movieCredits = (try? await movies) ?? []
+            showCredits = (try? await shows) ?? []
         }
     }
 }
 
 /// One filmography entry: poster, title, year and role — with a checkmark
-/// when the movie is already in the library.
+/// when the title is already in the library.
 private struct FilmographyRow: View {
-    let credit: TMDB.FilmCredit
+    let credit: PersonCredit
     let isInLibrary: Bool
 
     var body: some View {
@@ -157,7 +242,7 @@ private struct FilmographyRow: View {
             } placeholder: {
                 ZStack {
                     Color(white: 0.15)
-                    Image(systemName: "film")
+                    Image(systemName: credit.isShow ? "tv" : "film")
                         .foregroundStyle(.secondary)
                 }
             }
