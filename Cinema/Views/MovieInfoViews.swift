@@ -69,6 +69,27 @@ private struct PersonCard: View {
     }
 }
 
+/// Genre pills for plain genre names — the discovery counterpart of the
+/// library's `GenreView`, sharing its visual style.
+struct GenreNamesView: View {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    let names: [String]
+
+    var body: some View {
+        HStack(spacing: Constants.genreSpacing) {
+            ForEach(names, id: \.self) { name in
+                Text(name)
+                    .fixedSize()
+                    .font(horizontalSizeClass == .compact ? .caption2 : .caption)
+                    .padding(.horizontal, Constants.genreHorizontalPadding)
+                    .padding(.vertical, Constants.genreVerticalPadding)
+                    .background(Capsule().stroke())
+            }
+        }
+    }
+}
+
 /// One movie fact in the TV-app's label-over-value style.
 struct FactView: View {
     let label: String

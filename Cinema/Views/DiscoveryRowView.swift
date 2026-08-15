@@ -113,6 +113,10 @@ private struct DiscoveryMovieSheet: View {
                             }
                         }
 
+                        if let genreNames = moviePage?.genreNames, !genreNames.isEmpty {
+                            GenreNamesView(names: genreNames)
+                        }
+
                         if !movie.overview.isEmpty {
                             Text(movie.overview)
                                 .font(.body)

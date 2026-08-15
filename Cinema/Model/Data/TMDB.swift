@@ -95,9 +95,19 @@ enum TMDB {
             let crew: [Crew]
         }
 
+        struct GenreItem: Codable, Sendable {
+            let name: String
+        }
+
         let runtime: Int?
         let voteAverage: Double?
+        let genres: [GenreItem]?
         let credits: Credits?
+
+        /// The genre names, ready for pill rendering.
+        var genreNames: [String] {
+            genres?.map(\.name) ?? []
+        }
 
         /// Cast first (capped), then the key creative crew — the TV-app ordering.
         var people: [CreditedPerson] {
