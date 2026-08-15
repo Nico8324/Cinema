@@ -23,17 +23,23 @@ struct HeroView: View {
         // Text anchors to the poster's bottom-left, over the gradient — the sample
         // centered it vertically, which only worked with its much taller artwork.
         ZStack(alignment: .bottomLeading) {
-            Group {
-                PosterImageView(video: video)
-                    .aspectRatio(16 / 9, contentMode: .fit)
-                    .accessibilityHidden(true)
-
-                // Add a subtle gradient to make the text stand out.
-                GradientView(style: .black.opacity(0.6), startPoint: .leading)
+            // The gradients overlay the poster rather than standing as siblings:
+            // as siblings, their fixed heights would stretch the hero taller than
+            // the 16:9 poster and break its full-bleed anchoring to the top edge.
+            // A taller, cropped hero on iPhone (like the TV app) — a bare 16:9 strip
+            // leaves no room for the title text above the gradient.
+            PosterImageView(video: video)
+                .aspectRatio(isCompact ? 3 / 4 : 16 / 9, contentMode: .fit)
+                .overlay {
+                    GradientView(style: .black.opacity(0.6), startPoint: .leading)
+                }
                 #if os(iOS)
-                GradientView(style: .black, height: isCompact ? Constants.compactGradientSize : Constants.gradientSize / 2, startPoint: .bottom)
+                .overlay(alignment: .bottom) {
+                    GradientView(style: .black, height: isCompact ? Constants.compactGradientSize : Constants.gradientSize / 2, startPoint: .bottom)
+                }
                 #endif
-            }
+                .clipped()
+                .accessibilityHidden(true)
 
             // Real-world titles and synopses can be long — cap the overlay's lines
             // so it never outgrows the poster behind it.

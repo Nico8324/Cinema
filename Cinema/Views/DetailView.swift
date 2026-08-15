@@ -128,18 +128,20 @@ struct DetailView: View {
                 } label: {
                     Label("More", systemImage: "ellipsis.circle")
                 }
+                // Anchored here so the confirmation popover springs from this
+                // button rather than the middle of the screen.
+                .confirmationDialog(
+                    "Delete “\(video.name)”?",
+                    isPresented: $isConfirmingDelete,
+                    titleVisibility: .visible
+                ) {
+                    Button("Delete Video", role: .destructive) {
+                        deleteVideo()
+                    }
+                } message: {
+                    Text("This can’t be undone.")
+                }
             }
-        }
-        .confirmationDialog(
-            "Delete “\(video.name)”?",
-            isPresented: $isConfirmingDelete,
-            titleVisibility: .visible
-        ) {
-            Button("Delete Video", role: .destructive) {
-                deleteVideo()
-            }
-        } message: {
-            Text("This can’t be undone.")
         }
         .sheet(isPresented: $isEditing) {
             EditVideoView(video: video)
