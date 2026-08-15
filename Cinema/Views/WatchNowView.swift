@@ -27,9 +27,12 @@ struct WatchNowView: View {
         recentlyPlayedVideos.filter(\.isPartiallyWatched)
     }
 
-    /// Movies currently in theatres (from TMDB) — discovery content below the
-    /// personal rows. An empty array (offline, API trouble) just hides the row.
-    @State private var inTheatresMovies: [TMDB.Movie] = []
+    /// Which TMDB list feeds the discovery row — the user picks it in Settings.
+    @AppStorage(TMDB.MovieList.storageKey) private var discoveryList: TMDB.MovieList = .nowPlaying
+
+    /// Discovery content below the personal rows, from the chosen TMDB list.
+    /// An empty array (offline, API trouble) just hides the row.
+    @State private var discoveryMovies: [TMDB.Movie] = []
 
     #if os(visionOS)
     @State private var isShowingSettings = false
@@ -72,8 +75,8 @@ struct WatchNowView: View {
                                               videos: recentlyAddedVideos,
                                               cardStyle: .full, namespace: namespace)
 
-                                if !inTheatresMovies.isEmpty {
-                                    InTheatresRow(movies: inTheatresMovies)
+                                if !discoveryMovies.isEmpty {
+                                    DiscoveryRow(title: discoveryList.displayName, movies: discoveryMovies)
                                 }
                             }
                             .padding(.bottom, Constants.outerPadding)
@@ -83,8 +86,9 @@ struct WatchNowView: View {
                 }
             }
             .navigationDestinationVideo(in: namespace)
-            .task {
-                inTheatresMovies = (try? await TMDB.nowPlayingMovies()) ?? []
+            // Refetches when the Settings choice changes.
+            .task(id: discoveryList) {
+                discoveryMovies = (try? await TMDB.movies(from: discoveryList)) ?? []
             }
             .toolbarBackground(.hidden)
             .overlay(alignment: .topLeading) {

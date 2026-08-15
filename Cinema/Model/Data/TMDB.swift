@@ -96,13 +96,56 @@ enum TMDB {
         return components.url!
     }
 
-    /// Movies currently playing in theatres for the user's region.
-    static func nowPlayingMovies() async throws -> [Movie] {
-        let url = endpoint("/movie/now_playing", query: [
-            URLQueryItem(name: "language", value: Locale.preferredLanguages.first ?? "en-US"),
-            URLQueryItem(name: "region", value: Locale.current.region?.identifier ?? "US")
-        ])
-        let (data, _) = try await URLSession.shared.data(from: url)
+    /// The TMDB movie lists the Watch Now discovery row can show, chosen in Settings.
+    enum MovieList: String, CaseIterable, Identifiable, Sendable {
+        case nowPlaying
+        case upcoming
+        case popular
+        case topRated
+        case trending
+
+        /// The Settings key holding the user's choice.
+        static let storageKey = "watchNowDiscoveryList"
+
+        var id: String { rawValue }
+
+        /// The user-facing name — the Settings option and the Watch Now row title.
+        var displayName: String {
+            switch self {
+            case .nowPlaying: String(localized: "In Theatres")
+            case .upcoming: String(localized: "Coming Soon")
+            case .popular: String(localized: "Popular")
+            case .topRated: String(localized: "Top Rated")
+            case .trending: String(localized: "Trending This Week")
+            }
+        }
+
+        fileprivate var path: String {
+            switch self {
+            case .nowPlaying: "/movie/now_playing"
+            case .upcoming: "/movie/upcoming"
+            case .popular: "/movie/popular"
+            case .topRated: "/movie/top_rated"
+            case .trending: "/trending/movie/week"
+            }
+        }
+
+        /// Theatrical schedules differ by country; taste-based lists don't.
+        fileprivate var usesRegion: Bool {
+            switch self {
+            case .nowPlaying, .upcoming: true
+            case .popular, .topRated, .trending: false
+            }
+        }
+    }
+
+    /// The movies in one of TMDB's curated lists, localized for the user.
+    static func movies(from list: MovieList) async throws -> [Movie] {
+        var query = [URLQueryItem(name: "language", value: Locale.preferredLanguages.first ?? "en-US")]
+        if list.usesRegion {
+            query.append(URLQueryItem(name: "region", value: Locale.current.region?.identifier ?? "US"))
+        }
+        let (data, _) = try await URLSession.shared.data(from: endpoint(list.path, query: query))
         // Cards are pure poster art — entries without a poster have nothing to show.
         return try decoder.decode(SearchResponse.self, from: data).results.filter { $0.posterPath != nil }
     }

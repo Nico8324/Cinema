@@ -16,6 +16,7 @@ struct SettingsView: View {
     @Query private var videos: [Video]
 
     @AppStorage(ProfileStore.nameKey) private var profileName: String = ""
+    @AppStorage(TMDB.MovieList.storageKey) private var discoveryList: TMDB.MovieList = .nowPlaying
 
     @State private var isConfirmingClear = false
 
@@ -54,6 +55,18 @@ struct SettingsView: View {
                         isConfirmingClear = true
                     }
                     .disabled(videos.isEmpty)
+                }
+
+                Section {
+                    Picker("Discover Row", selection: $discoveryList) {
+                        ForEach(TMDB.MovieList.allCases) { list in
+                            Text(list.displayName).tag(list)
+                        }
+                    }
+                } header: {
+                    Text("Watch Now")
+                } footer: {
+                    Text("Which movies from The Movie Database appear at the bottom of Watch Now.")
                 }
 
                 Section("About") {

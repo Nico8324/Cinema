@@ -2,15 +2,16 @@
 See the LICENSE.txt file for licensing information.
 
 Abstract:
-A Watch Now row of movies currently in theatres, with a detail sheet and trailer.
+A Watch Now row of movies from a TMDB list, with a detail sheet and trailer.
 */
 
 import SwiftUI
 
-/// A horizontally scrolling row of movies currently in theatres (from TMDB),
-/// shown as portrait poster cards. Tapping one opens a detail sheet with the
-/// movie's backdrop, overview, and trailer.
-struct InTheatresRow: View {
+/// A horizontally scrolling row of movies from the TMDB list chosen in Settings
+/// (in theatres, coming soon, popular…), shown as portrait poster cards. Tapping
+/// one opens a detail sheet with the movie's backdrop, overview, and trailer.
+struct DiscoveryRow: View {
+    let title: String
     let movies: [TMDB.Movie]
 
     @State private var selectedMovie: TMDB.Movie?
@@ -23,7 +24,7 @@ struct InTheatresRow: View {
                         Button {
                             selectedMovie = movie
                         } label: {
-                            TheatrePosterCard(movie: movie)
+                            DiscoveryPosterCard(movie: movie)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(movie.title)
@@ -33,21 +34,21 @@ struct InTheatresRow: View {
             }
             .scrollClipDisabled()
         } header: {
-            Text("In Theatres")
+            Text(title)
                 .font(.title3.bold())
                 .padding(.vertical, Constants.listTitleVerticalPadding)
                 .padding(.leading, Constants.outerPadding)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
         }
         .sheet(item: $selectedMovie) { movie in
-            TheatreMovieSheet(movie: movie)
+            DiscoveryMovieSheet(movie: movie)
         }
     }
 }
 
-/// A portrait poster card — theatre entries are discovery content, so they look
-/// deliberately different from the landscape cards of owned videos.
-private struct TheatrePosterCard: View {
+/// A portrait poster card — discovery entries deliberately look different from
+/// the landscape cards of owned videos.
+private struct DiscoveryPosterCard: View {
     let movie: TMDB.Movie
 
     var body: some View {
@@ -63,7 +64,7 @@ private struct TheatrePosterCard: View {
             }
         }
         .aspectRatio(2 / 3, contentMode: .fit)
-        .frame(width: Constants.theatrePosterWidth)
+        .frame(width: Constants.discoveryPosterWidth)
         .clipShape(.rect(cornerRadius: Constants.cornerRadius))
         #if os(iOS) || os(visionOS)
         .hoverEffect()
@@ -71,9 +72,9 @@ private struct TheatrePosterCard: View {
     }
 }
 
-/// The theatre movie's details: backdrop, metadata, overview, and its trailer,
+/// The discovery movie's details: backdrop, metadata, overview, and its trailer,
 /// playing inline through the same player the library's trailers use.
-private struct TheatreMovieSheet: View {
+private struct DiscoveryMovieSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let movie: TMDB.Movie
@@ -139,8 +140,8 @@ private struct TheatreMovieSheet: View {
 }
 
 extension Constants {
-    /// The width of an In Theatres portrait poster card.
-    static var theatrePosterWidth: Double {
+    /// The width of a discovery-row portrait poster card.
+    static var discoveryPosterWidth: Double {
         #if os(visionOS)
         180
         #else
