@@ -22,13 +22,13 @@ struct ProfileButtonView: View {
 /// A view that displays the icon of the profile button.
 private struct ProfileIconView: View {
     var body: some View {
-        Image(systemName: "person.crop.circle")
-            .resizable()
-            .scaledToFit()
+        // The shared profile photo, matching the iOS profile button.
+        ProfileImageView()
             .frame(
                 width: Constants.profileIconSize.width,
                 height: Constants.profileIconSize.height
             )
+            .clipShape(Circle())
     }
 }
 

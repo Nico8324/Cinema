@@ -62,10 +62,10 @@ enum Presentation {
     /// Observes the current player item for load failures.
     private var itemStatusObservation: NSKeyValueObservation?
 
-    /// Whether the current YouTube item already got its one automatic retry.
-    /// Extraction occasionally produces a URL YouTube then refuses (HTTP 403);
-    /// a single fresh re-extraction usually fixes it.
-    private var hasRetriedYouTubeStream = false
+    /// Remaining automatic retries for the current YouTube item. Extraction
+    /// occasionally produces URLs YouTube then refuses (HTTP 403); fresh
+    /// re-extractions usually fix it.
+    private var youTubeRetriesLeft = 2
 
     /// Whether the app has already performed its one-time resume/start-time seek for the currently loaded item.
     /// Without this guard, the `timeControlStatus` observer below would re-seek on every play/pause toggle.
@@ -221,7 +221,7 @@ enum Presentation {
         // Update the model state for the request.
         currentItem = video
         shouldAutoPlay = autoplay
-        hasRetriedYouTubeStream = false
+        youTubeRetriesLeft = 2
 
         streamResolutionTask?.cancel()
         if video.isYouTubeVideo {
@@ -298,8 +298,8 @@ enum Presentation {
         guard let video = currentItem else { return }
         logger.error("Playback failed for \(video.name): \(error?.localizedDescription ?? "unknown error")")
 
-        if video.isYouTubeVideo, !hasRetriedYouTubeStream {
-            hasRetriedYouTubeStream = true
+        if video.isYouTubeVideo, youTubeRetriesLeft > 0 {
+            youTubeRetriesLeft -= 1
             streamResolutionTask?.cancel()
             streamResolutionTask = Task {
                 await loadYouTubeItem(for: video)

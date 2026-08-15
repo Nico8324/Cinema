@@ -35,9 +35,9 @@ struct InlineTrailerView: View {
     @State private var didFail = false
     @State private var isFullScreen = false
     @State private var isResolving = false
-    // Extraction occasionally produces a URL YouTube then refuses; one fresh
-    // re-extraction usually fixes it (same policy as the main player).
-    @State private var retriesLeft = 1
+    // Extraction occasionally produces URLs YouTube then refuses (HTTP 403);
+    // fresh re-extractions usually fix it (same policy as the main player).
+    @State private var retriesLeft = 2
     @State private var statusObservation: NSKeyValueObservation?
 
     var body: some View {
@@ -51,7 +51,7 @@ struct InlineTrailerView: View {
                     TrailerCardView(youtubeID: youtubeID, isLoading: isLoading, didFail: didFail)
                 }
                 .buttonStyle(.plain)
-                .disabled(isLoading || didFail)
+                .disabled(isLoading)
             }
         }
         .aspectRatio(16 / 9, contentMode: .fit)
@@ -89,6 +89,11 @@ struct InlineTrailerView: View {
     }
 
     private func requestPlayback() {
+        // A failed card isn't a dead end — tapping tries again from scratch.
+        if didFail {
+            didFail = false
+            retriesLeft = 1
+        }
         if player != nil {
             beginPlayback()
         } else {
@@ -121,6 +126,9 @@ struct InlineTrailerView: View {
             let item = AVPlayerItem(url: streamURL)
             statusObservation = item.observe(\.status) { item, _ in
                 guard item.status == .failed else { return }
+                // Log the underlying error — hardware failures are hard to
+                // reproduce, so this line is the evidence.
+                logger.error("Trailer item failed: \(item.error?.localizedDescription ?? "unknown"), underlying: \(String(describing: (item.error as NSError?)?.userInfo[NSUnderlyingErrorKey]))")
                 Task { @MainActor in
                     await retryOrFail()
                 }
@@ -227,7 +235,7 @@ struct TrailerCardView: View {
         .aspectRatio(16 / 9, contentMode: .fit)
         .overlay {
             if didFail {
-                Label("Trailer Unavailable", systemImage: "exclamationmark.triangle")
+                Label("Trailer Unavailable — Tap to Retry", systemImage: "arrow.clockwise")
                     .font(.callout)
                     .padding(10)
                     .background(.thinMaterial, in: Capsule())
