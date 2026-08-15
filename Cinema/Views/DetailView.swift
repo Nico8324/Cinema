@@ -128,16 +128,16 @@ struct DetailView: View {
                 } label: {
                     Label("More", systemImage: "ellipsis.circle")
                 }
-                // Anchored here so the confirmation popover springs from this
-                // button rather than the middle of the screen.
-                .confirmationDialog(
+                // A centered alert — the standard treatment for a destructive,
+                // irreversible confirmation, with no popover anchoring quirks.
+                .alert(
                     "Delete “\(video.name)”?",
-                    isPresented: $isConfirmingDelete,
-                    titleVisibility: .visible
+                    isPresented: $isConfirmingDelete
                 ) {
                     Button("Delete Video", role: .destructive) {
                         deleteVideo()
                     }
+                    Button("Cancel", role: .cancel) { }
                 } message: {
                     Text("This can’t be undone.")
                 }
