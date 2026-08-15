@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample’s licensing information.
+See the LICENSE.txt file for licensing information.
 
 Abstract:
 A model class that defines the properties of a video item in the up next queue.
@@ -8,19 +8,18 @@ A model class that defines the properties of a video item in the up next queue.
 import Foundation
 import SwiftData
 
-///  A model class that defines the properties of anvideo item in the up next queue.
+/// A model class that defines the properties of a video item in the up next queue.
+///
+/// `Video.upNextItem` declares a cascade delete rule toward this entity, so deleting a
+/// video also removes its queue entry.
 @Model
 final class UpNextItem {
-    @Attribute(.unique)
-    private var videoID: Int
-    
     @Relationship(deleteRule: .nullify)
     var video: Video?
-    
+
     var createdAt: Date
-    
+
     init(video: Video, createdAt: Date = .now) {
-        self.videoID = video.id
         self.video = video
         self.createdAt = createdAt
     }

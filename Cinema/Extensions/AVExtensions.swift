@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample’s licensing information.
+See the LICENSE.txt file for licensing information.
 
 Abstract:
 A structure that represents the result of an audio session interruption, such as a phone call.

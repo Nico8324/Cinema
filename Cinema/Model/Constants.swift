@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample’s licensing information.
+See the LICENSE.txt file for licensing information.
 
 Abstract:
 Constant values that the app defines.

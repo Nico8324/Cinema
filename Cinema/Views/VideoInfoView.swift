@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample’s licensing information.
+See the LICENSE.txt file for licensing information.
 
 Abstract:
 A view that displays information about a video including its title, description, and genre.
@@ -10,16 +10,16 @@ import SwiftData
 /// A view that displays information about a video including its title, description, and genre.
 struct InfoView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    
+
     private var isCompact: Bool {
         horizontalSizeClass == .compact
     }
-    
+
     let video: Video
-    
+
     var body: some View {
         VStack(alignment: .leading) {
-            Text("\(video.formattedYearOfRelease) | \(video.localizedContentRating) | \(video.formattedDuration)",
+            Text("\(video.formattedYearOfRelease) | \(video.contentRating) | \(video.formattedDuration)",
                  comment: "Release Year | Rating | Duration")
                 #if os(tvOS)
                 .font(.caption)
@@ -28,10 +28,10 @@ struct InfoView: View {
                 #endif
                 .foregroundStyle(.secondary)
 
-            Text(video.localizedName)
+            Text(video.name)
                 .font(isCompact ? .body : .title3)
 
-            Text(video.localizedSynopsis)
+            Text(video.synopsis)
                 .font(isCompact ? .caption : .body)
                 .lineLimit(2, reservesSpace: true)
 
@@ -45,13 +45,13 @@ struct InfoView: View {
 /// A view that displays a list of genres for a video.
 struct GenreView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    
+
     private var isCompact: Bool {
         horizontalSizeClass == .compact
     }
-    
+
     let genres: [Genre]
-    
+
     var body: some View {
         HStack(spacing: Constants.genreSpacing) {
             ForEach(genres) {
@@ -66,51 +66,18 @@ struct GenreView: View {
     }
 }
 
-/// A view that displays the name of a position, followed by one or more people who hold the position in the video.
-struct RoleView: View {
-    let role: String
-    let people: [Person]
-    
-    var body: some View {
-        let peopleString = people.map { $0.displayName }
-
-        VStack(alignment: .leading) {
-            Text(role)
-            Text(peopleString.formatted())
-        }
-    }
-}
-
 /// A view that displays a the video poster image with its title..
 struct PosterCard: View {
-    let image: Image
+    let video: Video
     let title: String
     /// Fraction watched (0...1). When provided, overlays a "Continue Watching"-style progress bar on the poster.
     var progress: Double? = nil
 
     var body: some View {
-        #if os(tvOS)
-        ZStack(alignment: .bottom) {
-            image
-                .scaledToFill()
-
-            // Material gradient
-            GradientView(style: .ultraThinMaterial, height: 90, startPoint: .bottom)
-            Text(title)
-                .font(.caption.bold())
-                .padding()
-            if let progress {
-                WatchProgressBar(progress: progress)
-                    .padding(.horizontal)
-                    .padding(.bottom, 8)
-            }
-        }
-        .cornerRadius(Constants.cornerRadius)
-        #else
         VStack {
             ZStack(alignment: .bottom) {
-                image
-                    .scaledToFill()
+                PosterImageView(video: video)
+                    .aspectRatio(16 / 9, contentMode: .fit)
                     .cornerRadius(Constants.cornerRadius)
 
                 if let progress {
@@ -127,7 +94,6 @@ struct PosterCard: View {
             #endif
                 .lineLimit(1)
         }
-        #endif
     }
 }
 
@@ -147,7 +113,7 @@ private struct WatchProgressBar: View {
 }
 
 #Preview(traits: .previewData) {
-    @Previewable @Query(sort: \Video.id) var videos: [Video]
+    @Previewable @Query(sort: \Video.name) var videos: [Video]
     return Group {
         if let video = videos.first {
             InfoView(video: video)
@@ -155,4 +121,3 @@ private struct WatchProgressBar: View {
         }
     }
 }
-

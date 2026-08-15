@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample’s licensing information.
+See the LICENSE.txt file for licensing information.
 
 Abstract:
 The app's top level view.
@@ -24,7 +24,9 @@ struct ContentView: View {
                         ImmersiveEnvironmentPickerView()
                     }
                     .onAppear {
-                        player.play()
+                        if player.shouldAutoPlay {
+                            player.play()
+                        }
                     }
             default:
                 // Shows the app's content library by default.

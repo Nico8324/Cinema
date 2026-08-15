@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample’s licensing information.
+See the LICENSE.txt file for licensing information.
 
 Abstract:
 A single unit in the app's navigation stack.
@@ -8,14 +8,9 @@ A single unit in the app's navigation stack.
 import SwiftUI
 
 /// A single unit in the app's navigation stack.
-enum NavigationNode: Equatable, Hashable, Identifiable {
-    case category(Int)
-    case video(Int)
-    
-    var id: Int {
-        switch self {
-        case .category(let id): id
-        case .video(let id): id
-        }
-    }
+///
+/// Navigation is value-based: nodes carry a stable identity, never a model object,
+/// so paths stay serializable and deep-link ready.
+enum NavigationNode: Equatable, Hashable {
+    case video(Video.ID)
 }

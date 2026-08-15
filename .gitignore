@@ -22,3 +22,6 @@ xcuserdata/
 
 # Local test fixtures (real trailer downloads used for manual testing, not for distribution)
 /MediaPlaceholder/
+
+# Local secrets — never commit API keys (see Secrets.swift.example)
+Cinema/Model/Data/Secrets.swift

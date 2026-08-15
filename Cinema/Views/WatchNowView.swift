@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample’s licensing information.
+See the LICENSE.txt file for licensing information.
 
 Abstract:
 A view that presents the app's content library.
@@ -12,13 +12,10 @@ import SwiftData
 struct WatchNowView: View {
     @State private var navigationPath = [NavigationNode]()
     @Namespace private var namespace
-    
-    @Query(filter: #Predicate<Video> { $0.isHero }, sort: \.id)
-    private var heroVideos: [Video]
-    
-    @Query(filter: #Predicate<Video> { $0.isFeatured }, sort: \.id)
-    private var featuredVideos: [Video]
-    
+
+    @Query(sort: \Video.dateAdded, order: .reverse)
+    private var recentlyAddedVideos: [Video]
+
     @Query(sort: \UpNextItem.createdAt)
     private var playlist: [UpNextItem]
 
@@ -30,10 +27,6 @@ struct WatchNowView: View {
         recentlyPlayedVideos.filter(\.isPartiallyWatched)
     }
 
-    private var hasContent: Bool {
-        !heroVideos.isEmpty || !featuredVideos.isEmpty || !playlist.isEmpty || !continueWatchingVideos.isEmpty
-    }
-
     #if os(visionOS)
     @State private var isShowingSettings = false
     #endif
@@ -42,7 +35,7 @@ struct WatchNowView: View {
         // Wrap the content in a vertically scrolling view.
         NavigationStack(path: $navigationPath) {
             Group {
-                if !hasContent {
+                if recentlyAddedVideos.isEmpty {
                     ContentUnavailableView(
                         "Nothing to Watch Yet",
                         systemImage: "play.rectangle.on.rectangle",
@@ -52,7 +45,8 @@ struct WatchNowView: View {
                 } else {
                     ScrollView(showsIndicators: false) {
                         VStack {
-                            if let heroVideo = heroVideos.first {
+                            // Feature the latest addition to the library.
+                            if let heroVideo = recentlyAddedVideos.first {
                                 HeroView(video: heroVideo, namespace: namespace)
                             }
 
@@ -64,27 +58,15 @@ struct WatchNowView: View {
                                                   cardStyle: .half, namespace: namespace)
                                 }
 
-                                if !featuredVideos.isEmpty {
-                                    VideoListView(title: "Featured",
-                                                  videos: featuredVideos,
-                                                  cardStyle: .full, namespace: namespace)
-                                }
-
-                                if !Category.collectionsList.isEmpty {
-                                    CategoryListView(title: "Collections",
-                                                     categoryList: Category.collectionsList, namespace: namespace)
-                                }
-
-                                if !Category.animationsList.isEmpty {
-                                    CategoryListView(title: "Animations",
-                                                     categoryList: Category.animationsList, namespace: namespace)
-                                }
-
                                 if !playlist.isEmpty {
                                     VideoListView(title: "Up Next",
                                                   videos: playlist.compactMap(\.video),
                                                   cardStyle: .half, namespace: namespace)
                                 }
+
+                                VideoListView(title: "Recently Added",
+                                              videos: recentlyAddedVideos,
+                                              cardStyle: .full, namespace: namespace)
                             }
                             .padding(.bottom, Constants.outerPadding)
                         }
@@ -113,4 +95,3 @@ struct WatchNowView: View {
 #Preview(traits: .previewData) {
     WatchNowView()
 }
-

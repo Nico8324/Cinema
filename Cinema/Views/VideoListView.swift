@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample’s licensing information.
+See the LICENSE.txt file for licensing information.
 
 Abstract:
 A view the presents a horizontally scrollable list of video cards.
@@ -66,11 +66,11 @@ struct VideoListView: View {
                                 }
                             }
                         }
-                        .accessibilityLabel(video.localizedName)
+                        .accessibilityLabel(video.name)
                         .transitionSource(id: video.id, namespace: namespace)
                     }
                 }
-                .buttonStyle(buttonStyle)
+                .buttonStyle(.plain)
                 .padding(.leading, Constants.outerPadding)
             }
             .scrollClipDisabled()
@@ -85,18 +85,10 @@ struct VideoListView: View {
         }
     }
     
-    var buttonStyle: some PrimitiveButtonStyle {
-        #if os(tvOS)
-        .card
-        #else
-        .plain
-        #endif
-    }
-    
 }
 
 #Preview("Full", traits: .previewData) {
-    @Previewable @Query(sort: \Video.id) var videos: [Video]
+    @Previewable @Query(sort: \Video.name) var videos: [Video]
     @Previewable @Namespace var namespace
     
     return NavigationStack {

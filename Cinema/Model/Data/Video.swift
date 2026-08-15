@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample’s licensing information.
+See the LICENSE.txt file for licensing information.
 
 Abstract:
 A model class that defines the properties of a video.
@@ -7,54 +7,49 @@ A model class that defines the properties of a video.
 
 import Foundation
 import SwiftData
-import CoreMedia
 import SwiftUI
 
 /// A model class that defines the properties of a video.
 @Model
 final class Video: Identifiable {
-    @Relationship(inverse: \Person.appearsIn)
-    var actors: [Person]
-    
-    @Relationship(inverse: \Person.wrote)
-    var writers: [Person]
-    
-    @Relationship(inverse: \Person.directed)
-    var directors: [Person]
-    
     @Relationship(inverse: \Genre.videos)
     var genres: [Genre]
-    
-    @Relationship(inverse: \UpNextItem.video)
+
+    /// Deleting a video also deletes its Up Next queue entry.
+    @Relationship(deleteRule: .cascade, inverse: \UpNextItem.video)
     var upNextItem: UpNextItem?
-    
-    private var categoryIDs: [Int]
-    
-    @Transient
-    var categories: [Category] {
-        get {
-            categoryIDs.compactMap { Category(rawValue: $0) }
-        }
-        set {
-            categoryIDs = newValue.map(\.rawValue)
-        }
-    }
-    
-    var id: Int
-    var url: URL
-    var imageName: String
+
+    /// A stable, globally unique identity for the video, independent of the store's internals.
+    /// Declared with an inline default so SwiftData's migration can backfill existing rows —
+    /// a default only in `init` isn't visible to the migration (learned the hard way with `playbackPosition`).
+    var uuid: UUID = UUID()
+
+    /// The filename of the imported media file inside the app's Videos directory.
+    /// Only the filename is stored, never an absolute path — the app's sandbox container path
+    /// isn't stable across reinstalls/updates, so `mediaURL` reconstructs the full path fresh
+    /// against the current container every time it's read.
+    var localFilename: String?
+
+    /// A remote streaming URL, for videos not backed by a local file. Unused by the current
+    /// import flow, but kept explicit (rather than overloading one URL property with two
+    /// meanings) for a future remote-source feature.
+    @Attribute(originalName: "url")
+    var remoteURL: URL?
+
     var name: String
     var synopsis: String
     var yearOfRelease: Int
+    /// The video's duration in whole seconds.
     var duration: Int
-    var startTime: CMTimeValue
     var contentRating: String
-    var isHero: Bool
-    var isFeatured: Bool
+    /// When the video was added to the library — drives the "Recently Added" ordering.
+    var dateAdded: Date = Date.distantPast
+    /// The TMDB movie this entry was matched to, if any — enables metadata refreshes.
+    var tmdbID: Int?
+    /// The YouTube video ID of the movie's official trailer, from TMDB.
+    var trailerYouTubeID: String?
     /// Whether a poster thumbnail has been generated from the video file itself (see `ThumbnailGenerator`).
     /// Generation happens asynchronously after import, so this starts `false` and flips once the file lands on disk.
-    /// Declared with an inline default so SwiftData's lightweight migration can backfill existing rows —
-    /// a default only in `init` isn't visible to the migration (learned this the hard way with `playbackPosition`).
     var hasThumbnail: Bool = false
     /// How far into the video playback last stopped, in seconds. Drives the "Continue Watching" resume behavior.
     var playbackPosition: Double = 0
@@ -62,42 +57,29 @@ final class Video: Identifiable {
     var lastWatchedDate: Date?
 
     init(
-        id: Int,
         name: String,
         synopsis: String,
-        actors: [Person] = [],
-        writers: [Person] = [],
-        directors: [Person] = [],
         genres: [Genre] = [],
-        categoryIDs: [Int] = [],
-        url: URL,
-        imageName: String,
-        yearOfRelease: Int = 2023,
+        localFilename: String? = nil,
+        remoteURL: URL? = nil,
+        yearOfRelease: Int,
         duration: Int = 0,
-        startTime: CMTimeValue = 0,
         contentRating: String = "NR",
-        isHero: Bool = false,
-        isFeatured: Bool = false,
+        dateAdded: Date = .now,
         hasThumbnail: Bool = false,
         playbackPosition: Double = 0,
         lastWatchedDate: Date? = nil
     ) {
-        self.actors = actors
-        self.writers = writers
-        self.directors = directors
         self.genres = genres
-        self.categoryIDs = categoryIDs
-        self.id = id
-        self.url = url
-        self.imageName = imageName
+        self.uuid = UUID()
+        self.localFilename = localFilename
+        self.remoteURL = remoteURL
         self.name = name
         self.synopsis = synopsis
         self.yearOfRelease = yearOfRelease
         self.duration = duration
-        self.startTime = startTime
         self.contentRating = contentRating
-        self.isHero = isHero
-        self.isFeatured = isFeatured
+        self.dateAdded = dateAdded
         self.hasThumbnail = hasThumbnail
         self.playbackPosition = playbackPosition
         self.lastWatchedDate = lastWatchedDate
@@ -105,91 +87,53 @@ final class Video: Identifiable {
 }
 
 extension Video {
+    var id: UUID { uuid }
+
+    /// The duration formatted for display, like "1h 32m" or "8m 24s".
     var formattedDuration: String {
-        Duration.seconds(duration)
-            .formatted(.time(pattern: .minuteSecond(padMinuteToLength: 2)))
+        let allowed: Set<Duration.UnitsFormatStyle.Unit> = duration >= 3600 ? [.hours, .minutes] : [.minutes, .seconds]
+        return Duration.seconds(duration).formatted(.units(allowed: allowed, width: .narrow))
     }
-    
+
+    /// The duration spelled out for VoiceOver, like "1 hour, 32 minutes".
+    var accessibleDuration: String {
+        let allowed: Set<Duration.UnitsFormatStyle.Unit> = duration >= 3600 ? [.hours, .minutes] : [.minutes, .seconds]
+        return Duration.seconds(duration).formatted(.units(allowed: allowed, width: .wide))
+    }
+
     var formattedYearOfRelease: String {
-        yearOfRelease
-            .formatted(.number.grouping(.never))
-    }
-    
-    var landscapeImageName: String {
-        "\(imageName)_landscape"
+        yearOfRelease.formatted(.number.grouping(.never))
     }
 
-    var portraitImageName: String {
-        "\(imageName)_portrait"
+    /// A URL that resolves to the video's playable media — the imported local file if there is
+    /// one, otherwise the remote URL. `nil` when the video has no media at all.
+    var mediaURL: URL? {
+        if let localFilename {
+            return MediaStore.videoURL(forFilename: localFilename)
+        }
+        return remoteURL
     }
 
-    /// The generated poster thumbnail's file location, for locally imported videos that have one.
+    /// Whether this entry is a YouTube video rather than an imported file.
+    var isYouTubeVideo: Bool {
+        guard localFilename == nil, let remoteURL else { return false }
+        return YouTubeSource.isYouTubeURL(remoteURL)
+    }
+
+    /// The filename that keys this video's generated thumbnail on disk.
+    /// Imported files use their stored filename; YouTube entries use their video ID.
+    var thumbnailFilename: String? {
+        if let localFilename { return localFilename }
+        if let remoteURL, let id = YouTubeSource.videoID(from: remoteURL) {
+            return "youtube-\(id).jpg"
+        }
+        return nil
+    }
+
+    /// The generated poster thumbnail's file location, for videos that have one.
     var thumbnailURL: URL? {
-        guard hasThumbnail, url.isFileURL, let filename = url.host(), !filename.isEmpty else {
-            return nil
-        }
-        return URL.applicationSupportDirectory
-            .appending(path: "Thumbnails", directoryHint: .isDirectory)
-            .appending(path: filename, directoryHint: .notDirectory)
-            .deletingPathExtension()
-            .appendingPathExtension("jpg")
-    }
-
-    /// The generated thumbnail's raw data, if one exists on disk for this video.
-    private var thumbnailData: Data? {
-        guard let thumbnailURL else { return nil }
-        return try? Data(contentsOf: thumbnailURL)
-    }
-
-    /// A landscape poster image — the generated video thumbnail if one exists, otherwise the named asset.
-    var landscapeImage: Image {
-        if let thumbnailData, let platformImage = PlatformImage(data: thumbnailData) {
-            return Image(platformImage: platformImage)
-        }
-        return Image(landscapeImageName)
-    }
-
-    /// A portrait poster image — the generated video thumbnail if one exists, otherwise the named asset.
-    var portraitImage: Image {
-        if let thumbnailData, let platformImage = PlatformImage(data: thumbnailData) {
-            return Image(platformImage: platformImage)
-        }
-        return Image(portraitImageName)
-    }
-    
-    var localizedName: String {
-        String(localized: LocalizedStringResource(stringLiteral: self.name))
-    }
-    
-    var localizedSynopsis: String {
-        String(localized: LocalizedStringResource(stringLiteral: self.synopsis))
-    }
-    
-    var localizedContentRating: String {
-        String(localized: LocalizedStringResource(stringLiteral: self.contentRating))
-    }
-    
-    /// A url that resolves to specific local or remote media.
-    ///
-    /// Locally imported videos store only a filename marker (`file://<filename>`), not an absolute
-    /// path — the app's sandbox container path isn't stable across reinstalls/updates, so the real
-    /// path is reconstructed fresh against the current container every time this is read.
-    var resolvedURL: URL {
-        guard url.isFileURL, let filename = url.host(), !filename.isEmpty else {
-            return url
-        }
-        return URL.applicationSupportDirectory
-            .appending(path: "Videos", directoryHint: .isDirectory)
-            .appending(path: filename, directoryHint: .notDirectory)
-    }
-    
-    /// A Boolean value that indicates whether the video is hosted in a remote location.
-    var hasRemoteMedia: Bool {
-        !url.isFileURL
-    }
-    
-    var imageData: Data {
-        thumbnailData ?? PlatformImage(named: landscapeImageName)?.imageData ?? Data()
+        guard hasThumbnail, let thumbnailFilename else { return nil }
+        return MediaStore.thumbnailURL(forFilename: thumbnailFilename)
     }
 
     /// How much of the video has been watched, from 0 (not started) to 1 (finished).
@@ -204,13 +148,13 @@ extension Video {
         playbackPosition > 5 && playbackProgress < 0.95
     }
 
-    /// Removes the locally imported video file and its generated thumbnail (if any) from disk.
-    /// Safe to call for remote-media videos, which have neither.
+    /// Removes this video's files from disk: the imported media file and its thumbnail
+    /// for local videos, or just the generated thumbnail for remote (YouTube) entries.
     func removeLocalFiles() {
-        guard !hasRemoteMedia else { return }
-        try? FileManager.default.removeItem(at: resolvedURL)
-        if let thumbnailURL {
-            try? FileManager.default.removeItem(at: thumbnailURL)
+        if let localFilename {
+            MediaStore.removeMedia(forFilename: localFilename)
+        } else if let thumbnailFilename {
+            MediaStore.removeMedia(forFilename: thumbnailFilename)
         }
     }
 

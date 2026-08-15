@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample’s licensing information.
+See the LICENSE.txt file for licensing information.
 
 Abstract:
 A view that represents a video card.
@@ -9,7 +9,7 @@ import SwiftData
 
 /// Constants that represent the supported styles for video cards.
 enum VideoCardStyle {
-    
+
     /// A style for a full video card.
     ///
     /// This style presents a poster image on top and information about the video
@@ -20,18 +20,18 @@ enum VideoCardStyle {
     ///
     /// This style presents a medium-sized poster image on top and a title string below.
     case upNext
-            
+
     /// A style for cards in library view.
     ///
     /// This style presents a medium sized poster image with a title string below.
     case grid
-    
+
     /// A style for cards in a collection list
     ///
     /// This style presents an image on the leading edge with information about
     /// the video the trailing edge, including video description and genres.
     case stack
-    
+
     /// A style for up next cards in the watch now view.
     ///
     /// This style presents a medium-sized poster image on top and a title string below.
@@ -44,18 +44,13 @@ enum VideoCardStyle {
 /// A user can select a video card to view the video details.
 struct VideoCardView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    
+
     private var isCompact: Bool {
         horizontalSizeClass == .compact
     }
-    
+
     var video: Video
     var style: VideoCardStyle = .full
-    
-    var image: Image {
-        video.landscapeImage
-            .resizable()
-    }
 
     private var watchProgress: Double? {
         video.isPartiallyWatched ? video.playbackProgress : nil
@@ -64,7 +59,7 @@ struct VideoCardView: View {
     var body: some View {
         switch style {
         case .half:
-            PosterCard(image: image, title: video.localizedName, progress: watchProgress)
+            PosterCard(video: video, title: video.name, progress: watchProgress)
                 .frame(width: isCompact ? Constants.compactVideoCardWidth : Constants.videoCardWidth)
                 .clipShape(.rect(cornerRadius: Constants.cornerRadius))
                 #if os(iOS) || os(visionOS)
@@ -72,7 +67,7 @@ struct VideoCardView: View {
                 #endif
 
         case .upNext:
-            PosterCard(image: image, title: video.localizedName, progress: watchProgress)
+            PosterCard(video: video, title: video.name, progress: watchProgress)
                 .frame(width: Constants.upNextVideoCardWidth)
                 .clipShape(.rect(cornerRadius: Constants.cornerRadius))
                 #if os(iOS) || os(visionOS)
@@ -81,7 +76,8 @@ struct VideoCardView: View {
 
         case .full:
             VStack {
-                image.scaledToFill()
+                PosterImageView(video: video)
+                    .aspectRatio(16 / 9, contentMode: .fit)
 
                 InfoView(video: video)
             }
@@ -97,19 +93,19 @@ struct VideoCardView: View {
             .clipShape(.rect(cornerRadius: Constants.cornerRadius))
 
         case .grid:
-            PosterCard(image: image, title: video.localizedName, progress: watchProgress)
+            PosterCard(video: video, title: video.name, progress: watchProgress)
                 #if os(iOS) || os(visionOS)
                 .hoverEffect()
                 #endif
-            
+
         case .stack:
             HStack(spacing: 0) {
-                image
-                    .scaledToFill()
+                PosterImageView(video: video)
+                    .aspectRatio(16 / 9, contentMode: .fit)
                     .frame(maxWidth: isCompact ? Constants.stackImageCompactWidth : Constants.stackImageWidth)
                     .cornerRadius(Constants.cornerRadius)
                     .padding([.leading, .vertical], Constants.cardPadding)
-                
+
                 InfoView(video: video)
             }
             #if os(macOS)
@@ -126,7 +122,7 @@ struct VideoCardView: View {
 }
 
 #Preview("Full", traits: .previewData) {
-    @Previewable @Query(sort: \Video.id) var videos: [Video]
+    @Previewable @Query(sort: \Video.name) var videos: [Video]
     return Group {
         if let video = videos.first {
             VideoCardView(video: video, style: .full)
@@ -136,7 +132,7 @@ struct VideoCardView: View {
 }
 
 #Preview("Grid", traits: .previewData) {
-    @Previewable @Query(sort: \Video.id) var videos: [Video]
+    @Previewable @Query(sort: \Video.name) var videos: [Video]
     return Group {
         if let video = videos.first {
             VideoCardView(video: video, style: .grid)
@@ -146,7 +142,7 @@ struct VideoCardView: View {
 }
 
 #Preview("Half", traits: .previewData) {
-    @Previewable @Query(sort: \Video.id) var videos: [Video]
+    @Previewable @Query(sort: \Video.name) var videos: [Video]
     return Group {
         if let video = videos.first {
             VideoCardView(video: video, style: .half)
@@ -156,7 +152,7 @@ struct VideoCardView: View {
 }
 
 #Preview("Stack", traits: .previewData) {
-    @Previewable @Query(sort: \Video.id) var videos: [Video]
+    @Previewable @Query(sort: \Video.name) var videos: [Video]
     return Group {
         if let video = videos.first {
             VideoCardView(video: video, style: .stack)
@@ -166,7 +162,7 @@ struct VideoCardView: View {
 }
 
 #Preview("UpNext", traits: .previewData) {
-    @Previewable @Query(sort: \Video.id) var videos: [Video]
+    @Previewable @Query(sort: \Video.name) var videos: [Video]
     return Group {
         if let video = videos.first {
             VideoCardView(video: video, style: .upNext)
@@ -174,4 +170,3 @@ struct VideoCardView: View {
         }
     }
 }
-

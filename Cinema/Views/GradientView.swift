@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample’s licensing information.
+See the LICENSE.txt file for licensing information.
 
 Abstract:
 A gradient view.
@@ -13,7 +13,7 @@ struct GradientView: View {
     /// A fill style for the gradient.
     let style: any ShapeStyle
     
-    /// Thje direction of the gradient.
+    /// The direction of the gradient.
     var direction: Axis = .vertical
     
     /// The height of the view in points.

@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample’s licensing information.
+See the LICENSE.txt file for licensing information.
 
 Abstract:
 A view that lets a person set their profile name and picture.
@@ -12,8 +12,7 @@ import PhotosUI
 
 /// A view that lets a person set their profile name and picture.
 struct EditProfileView: View {
-    @AppStorage("profileName") private var profileName: String = "Anne Johnson"
-    @AppStorage("profileImageData") private var profileImageData: Data?
+    @AppStorage(ProfileStore.nameKey) private var profileName: String = ""
 
     #if !os(tvOS)
     @State private var selectedPhoto: PhotosPickerItem?
@@ -32,7 +31,7 @@ struct EditProfileView: View {
             .listRowBackground(Color.clear)
 
             Section("Name") {
-                TextField("Name", text: $profileName)
+                TextField("Name", text: $profileName, prompt: Text("Your Name"))
                     #if !os(macOS)
                     .textInputAutocapitalization(.words)
                     #endif
@@ -50,7 +49,7 @@ struct EditProfileView: View {
         .onChange(of: selectedPhoto) { _, newItem in
             Task {
                 if let data = try? await newItem?.loadTransferable(type: Data.self) {
-                    profileImageData = data
+                    ProfileStore.savePhoto(data)
                 }
             }
         }
@@ -61,35 +60,30 @@ struct EditProfileView: View {
     private var photoButton: some View {
         #if !os(tvOS)
         PhotosPicker(selection: $selectedPhoto, matching: .images) {
-            profileImage
-                .overlay(alignment: .bottomTrailing) {
-                    Image(systemName: "camera.circle.fill")
-                        .font(.title2)
-                        .symbolRenderingMode(.multicolor)
-                        .background(Circle().fill(.background))
-                }
+            // Built inline from fresh views: the picker's label closure is Sendable,
+            // so it must not reference the view's main-actor properties.
+            ProfilePhotoLabel()
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Choose Photo")
         #else
-        profileImage
+        ProfilePhotoLabel()
         #endif
     }
+}
 
-    private var profileImage: some View {
-        Group {
-            if let profileImageData, let platformImage = PlatformImage(data: profileImageData) {
-                Image(platformImage: platformImage)
-                    .resizable()
-            } else {
-                Image(systemName: "person.crop.circle.fill")
-                    .resizable()
-                    .foregroundStyle(.secondary)
+/// The circular profile photo with a camera badge, used as the photo picker's label.
+private struct ProfilePhotoLabel: View {
+    var body: some View {
+        ProfileImageView()
+            .frame(width: 96, height: 96)
+            .clipShape(Circle())
+            .overlay(alignment: .bottomTrailing) {
+                Image(systemName: "camera.circle.fill")
+                    .font(.title2)
+                    .symbolRenderingMode(.multicolor)
+                    .background(Circle().fill(.background))
             }
-        }
-        .scaledToFill()
-        .frame(width: 96, height: 96)
-        .clipShape(Circle())
     }
 }
 

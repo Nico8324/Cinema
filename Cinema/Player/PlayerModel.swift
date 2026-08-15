@@ -1,12 +1,11 @@
 /*
-See the LICENSE.txt file for this sample’s licensing information.
+See the LICENSE.txt file for licensing information.
 
 Abstract:
 A model object that manages the playback of video.
 */
 
 import AVKit
-import GroupActivities
 import SwiftData
 
 /// The presentation modes the player supports.
@@ -19,25 +18,22 @@ enum Presentation {
 
 /// A model object that manages the playback of video.
 @MainActor @Observable class PlayerModel {
-    
+
     /// A Boolean value that indicates whether playback is currently active.
     private(set) var isPlaying = false
-    
-    /// A Boolean value that indicates whether playback of the current item is complete.
-    private(set) var isPlaybackComplete = false
-    
+
     /// The presentation in which to display the current media.
     private(set) var presentation: Presentation = .inline
-    
+
     /// The currently loaded video.
     private(set) var currentItem: Video? = nil
-    
+
     /// A Boolean value that indicates whether the player should propose playing the next video in the Up Next list.
     private(set) var shouldProposeNextVideo = false
-    
+
     /// An object that manages the playback of a video's media.
     private var player: AVPlayer
-    
+
     /// The currently presented platform-specific video player user interface.
     ///
     /// On iOS, tvOS, and visionOS, the app uses `AVPlayerViewController` to present the video player user interface.
@@ -50,14 +46,26 @@ enum Presentation {
     /// Call the `makePlayerUI()` method to set this value.
     private var playerUI: AnyObject? = nil
     private var playerUIDelegate: AnyObject? = nil
-    
+
     private(set) var shouldAutoPlay = true
-    
-    /// An object that manages the app's SharePlay implementation.
-    private var coordinator: WatchingCoordinator
-    
+
     /// A token for periodic observation of the video player's time.
     private var timeObserver: Any? = nil
+
+    /// Long-lived notification-observation loops, retained so they can be cancelled on teardown.
+    private var observationTasks: [Task<Void, Never>] = []
+
+    /// The in-flight stream resolution for a YouTube item, cancelled when a new
+    /// video loads or the player resets.
+    private var streamResolutionTask: Task<Void, Never>?
+
+    /// Observes the current player item for load failures.
+    private var itemStatusObservation: NSKeyValueObservation?
+
+    /// Whether the current YouTube item already got its one automatic retry.
+    /// Extraction occasionally produces a URL YouTube then refuses (HTTP 403);
+    /// a single fresh re-extraction usually fixes it.
+    private var hasRetriedYouTubeStream = false
 
     /// Whether the app has already performed its one-time resume/start-time seek for the currently loaded item.
     /// Without this guard, the `timeControlStatus` observer below would re-seek on every play/pause toggle.
@@ -66,25 +74,29 @@ enum Presentation {
     /// The playback time last saved to the current video's `playbackPosition`, used to throttle writes.
     private var lastSavedPlaybackTime: TimeInterval = 0
 
+    /// The main-actor model context shared with the app's views. Using the same context the
+    /// views mutate keeps every write-and-save pair in one place — a private context here
+    /// would silently save the wrong one.
     private let modelContext: ModelContext
-    
+
     private var playerObservationToken: NSKeyValueObservation?
-    
+
     init(modelContainer: ModelContainer) {
-        let player = AVPlayer()
-        
-        self.modelContext = ModelContext(modelContainer)
-        self.coordinator = WatchingCoordinator(
-            coordinator: player.playbackCoordinator,
-            modelContainer: modelContainer
-        )
-        self.player = player
-        
+        self.modelContext = modelContainer.mainContext
+        self.player = AVPlayer()
+
         observePlayback()
-        observeSharedVideo()
         configureAudioSession()
     }
-    
+
+    // Runs on the main actor so it can tear down isolated observation state.
+    isolated deinit {
+        playerObservationToken?.invalidate()
+        for task in observationTasks {
+            task.cancel()
+        }
+    }
+
     #if os(macOS)
     /// Creates a new player view object.
     /// - Returns: a configured player view.
@@ -95,7 +107,7 @@ enum Presentation {
         // Set the model state
         playerUI = playerView
         playerUIDelegate = nil
-        
+
         return playerView
     }
     #else
@@ -105,18 +117,18 @@ enum Presentation {
         let controller = AVPlayerViewController()
         controller.player = player
         playerUI = controller
-        
+
         #if os(visionOS)
         @MainActor
         class PlayerViewObserver: NSObject, AVPlayerViewControllerDelegate {
             private var continuation: CheckedContinuation<Void, Never>?
-            
+
             func willEndFullScreenPresentation() async {
                 await withCheckedContinuation {
                     continuation = $0
                 }
             }
-            
+
             nonisolated func playerViewController(
                 _ playerViewController: AVPlayerViewController,
                 willEndFullScreenPresentationWithAnimationCoordinator coordinator: any UIViewControllerTransitionCoordinator
@@ -126,25 +138,25 @@ enum Presentation {
                 }
             }
         }
-        
+
         let observer = PlayerViewObserver()
         controller.delegate = observer
         playerUIDelegate = observer
-        
+
         Task {
             await observer.willEndFullScreenPresentation()
             reset()
         }
         #endif
-        
+
         return controller
     }
     #endif
-    
+
     private func observePlayback() {
         // Return early if the model calls this more than once.
         guard playerObservationToken == nil else { return }
-        
+
         // Observe the time control status to determine whether playback is active.
         playerObservationToken = player.observe(\.timeControlStatus) { observed, _ in
             Task { @MainActor [weak self] in
@@ -153,38 +165,39 @@ enum Presentation {
                 self.performOneTimeSeekIfNeeded()
             }
         }
-        
+
         let center = NotificationCenter.default
-        
+
         // Observe this notification to identify when a video plays to its end.
-        Task {
+        observationTasks.append(Task { [weak self] in
             for await _ in center.notifications(named: .AVPlayerItemDidPlayToEndTime) {
-                isPlaybackComplete = true
+                guard let self else { return }
                 // A finished video has nothing left to "continue watching" — clear its saved position.
-                currentItem?.playbackPosition = 0
-                try? modelContext.save()
+                self.currentItem?.playbackPosition = 0
+                self.modelContext.saveReportingErrors()
             }
-        }
-        
+        })
+
         #if !os(macOS)
         // Observe audio session interruptions.
-        Task {
+        observationTasks.append(Task { [weak self] in
             for await notification in center.notifications(named: AVAudioSession.interruptionNotification) {
+                guard let self else { return }
                 guard let result = InterruptionResult(notification) else { continue }
                 // Resume playback, if appropriate.
                 if result.type == .ended && result.options == .shouldResume {
-                    player.play()
+                    self.player.play()
                 }
             }
-        }
+        })
         #endif
-        
+
         // Add an observer of the player object's current time. The app observes
         // the player's current time to determine when to propose playing the next
         // video in the Up Next list.
         addTimeObserver()
     }
-    
+
     /// Configures the audio session for video playback.
     private func configureAudioSession() {
         #if !os(macOS)
@@ -199,41 +212,6 @@ enum Presentation {
         #endif
     }
 
-    /// Monitors the coordinator's `sharedVideo` property.
-    ///
-    /// If this value changes due to a remote participant sharing a new activity, load and present the new video.
-    private func observeSharedVideo() {
-        Task {
-            for await _ in NotificationCenter.default.notifications(named: .liveVideoDidChange) {
-                guard let liveVideoID = coordinator.liveVideoID,
-                      liveVideoID != currentItem?.id
-                else { continue }
-                loadVideo(withID: liveVideoID, presentation: .fullWindow)
-            }
-        }
-    }
-    
-    private func loadVideo(
-        withID videoID: Video.ID,
-        presentation: Presentation = .inline,
-        autoplay: Bool = true
-    ) {
-        do {
-            var descriptor = FetchDescriptor<Video>(predicate: #Predicate { $0.id == videoID })
-            descriptor.fetchLimit = 1
-            let results = try modelContext.fetch(descriptor)
-            
-            guard let video = results.first else {
-                logger.debug("Unable to fetch video with id \(videoID)")
-                return
-            }
-            
-            loadVideo(video, presentation: presentation)
-        } catch {
-            logger.debug("\(error.localizedDescription)")
-        }
-    }
-    
     /// Loads a video for playback in the requested presentation.
     /// - Parameters:
     ///   - video: The video to load for playback.
@@ -243,20 +221,17 @@ enum Presentation {
         // Update the model state for the request.
         currentItem = video
         shouldAutoPlay = autoplay
-        isPlaybackComplete = false
-        
-        switch presentation {
-        case .fullWindow:
-            Task {
-                // Attempt to SharePlay this video if a FaceTime call is active.
-                await coordinator.coordinatePlaybackOfVideo(withID: video.id)
-                // After preparing for coordination, load the video into the player and present it.
-                replaceCurrentItem(with: video)
+        hasRetriedYouTubeStream = false
+
+        streamResolutionTask?.cancel()
+        if video.isYouTubeVideo {
+            // YouTube stream URLs expire, so a fresh one is resolved for every playback.
+            // The player presents immediately and shows its loading state meanwhile.
+            streamResolutionTask = Task {
+                await loadYouTubeItem(for: video)
             }
-        case .inline:
-            // Don't SharePlay the video when playing it from the inline player,
-            // load the video into the player and present it.
-            replaceCurrentItem(with: video)
+        } else {
+            replaceCurrentItem(with: video, url: video.mediaURL)
         }
 
         // In visionOS, configure the spatial experience for either .inline or .fullWindow playback.
@@ -265,10 +240,38 @@ enum Presentation {
         // Set the presentation, which typically presents the player full window.
         self.presentation = presentation
    }
-    
-    private func replaceCurrentItem(with video: Video) {
+
+    /// Resolves a fresh stream URL for a YouTube entry and starts playback with it.
+    private func loadYouTubeItem(for video: Video) async {
+        do {
+            guard let remoteURL = video.remoteURL,
+                  let videoID = YouTubeSource.videoID(from: remoteURL),
+                  let streamURL = try await YouTubeSource.streamURL(forVideoID: videoID) else {
+                logger.error("No playable YouTube stream found for \(video.name).")
+                if currentItem === video { reset() }
+                return
+            }
+            // The user may have loaded something else while the stream resolved.
+            guard !Task.isCancelled, currentItem === video else { return }
+            replaceCurrentItem(with: video, url: streamURL)
+            // The presentation's onAppear autoplay fired before the item existed, so play here.
+            if shouldAutoPlay {
+                player.play()
+            }
+        } catch {
+            logger.error("Couldn't resolve a YouTube stream for \(video.name): \(error.localizedDescription)")
+            // Close the player rather than leaving an eternal loading spinner.
+            if currentItem === video { reset() }
+        }
+    }
+
+    private func replaceCurrentItem(with video: Video, url: URL?) {
+        guard let url else {
+            logger.error("\(video.name) has no playable media.")
+            return
+        }
         // Create a new player item and set it as the player's current item.
-        let playerItem = AVPlayerItem(url: video.resolvedURL)
+        let playerItem = AVPlayerItem(url: url)
         // Set external metadata on the player item for the current video.
         #if !os(macOS)
         playerItem.externalMetadata = createMetadataItems(for: video)
@@ -276,12 +279,37 @@ enum Presentation {
         // Reset per-item playback bookkeeping so the resume seek and progress-save throttle start fresh.
         hasSeekedForCurrentItem = false
         lastSavedPlaybackTime = 0
+        // Watch for the item failing to load, to drive the YouTube retry.
+        itemStatusObservation = playerItem.observe(\.status) { item, _ in
+            guard item.status == .failed else { return }
+            Task { @MainActor [weak self] in
+                self?.handlePlaybackFailure(error: item.error)
+            }
+        }
         // Set the new player item as current, and begin loading its data.
         player.replaceCurrentItem(with: playerItem)
         logger.debug("🍿 \(video.name) enqueued for playback.")
     }
 
-    /// Seeks to a saved "Continue Watching" position, or a curated start time, exactly once per loaded item.
+    /// Handles a player item that failed to load. YouTube items get one automatic
+    /// retry with a freshly extracted stream URL; anything else closes the player
+    /// rather than leaving a dead error state on screen.
+    private func handlePlaybackFailure(error: Error?) {
+        guard let video = currentItem else { return }
+        logger.error("Playback failed for \(video.name): \(error?.localizedDescription ?? "unknown error")")
+
+        if video.isYouTubeVideo, !hasRetriedYouTubeStream {
+            hasRetriedYouTubeStream = true
+            streamResolutionTask?.cancel()
+            streamResolutionTask = Task {
+                await loadYouTubeItem(for: video)
+            }
+        } else {
+            reset()
+        }
+    }
+
+    /// Seeks to a saved "Continue Watching" position exactly once per loaded item.
     /// Only runs once because `timeControlStatus` can change repeatedly (play/pause/buffering) for one item,
     /// and re-seeking on every change would fight a person scrubbing through the video.
     private func performOneTimeSeekIfNeeded() {
@@ -289,9 +317,6 @@ enum Presentation {
         if video.isPartiallyWatched {
             hasSeekedForCurrentItem = true
             player.seek(to: CMTime(seconds: video.playbackPosition, preferredTimescale: 600))
-        } else if video.startTime > 0 {
-            hasSeekedForCurrentItem = true
-            player.seek(to: CMTime(value: video.startTime, timescale: 1))
         }
     }
 
@@ -303,11 +328,15 @@ enum Presentation {
         lastSavedPlaybackTime = seconds
         currentItem.playbackPosition = seconds
         currentItem.lastWatchedDate = Date()
-        try? modelContext.save()
+        modelContext.saveReportingErrors()
     }
 
     /// Clears any loaded media and resets the player model to its default state.
     func reset() {
+        streamResolutionTask?.cancel()
+        streamResolutionTask = nil
+        itemStatusObservation?.invalidate()
+        itemStatusObservation = nil
         saveCurrentProgress()
         currentItem = nil
         player.replaceCurrentItem(with: nil)
@@ -318,22 +347,25 @@ enum Presentation {
             presentation = .inline
         }
     }
-    
+
     /// Creates metadata items from the video items data.
     /// - Parameter video: the video to create metadata for.
     /// - Returns: An array of `AVMetadataItem` to set on a player item.
     private func createMetadataItems(for video: Video) -> [AVMetadataItem] {
-        let mapping: [AVMetadataIdentifier: Any] = [
-            .commonIdentifierTitle: video.localizedName,
-            .commonIdentifierArtwork: video.imageData,
-            .commonIdentifierDescription: video.localizedSynopsis,
+        var mapping: [AVMetadataIdentifier: Any] = [
+            .commonIdentifierTitle: video.name,
+            .commonIdentifierDescription: video.synopsis,
             .commonIdentifierCreationDate: video.yearOfRelease,
-            .iTunesMetadataContentRating: video.localizedContentRating,
+            .iTunesMetadataContentRating: video.contentRating,
             .quickTimeMetadataGenre: video.genres.map(\.name)
         ]
+        // Artwork: the generated thumbnail, read once per playback start.
+        if let thumbnailURL = video.thumbnailURL, let artwork = try? Data(contentsOf: thumbnailURL) {
+            mapping[.commonIdentifierArtwork] = artwork
+        }
         return mapping.compactMap { createMetadataItem(for: $0, value: $1) }
     }
-    
+
     /// Creates a metadata item for a the specified identifier and value.
     /// - Parameters:
     ///   - identifier: an identifier for the item.
@@ -348,7 +380,7 @@ enum Presentation {
         item.extendedLanguageTag = "und"
         return item.copy() as! AVMetadataItem
     }
-    
+
     /// Configures the spatial audio experience to best fit the presentation.
     /// - Parameter presentation: the requested player presentation.
     private func configureAudioExperience(for presentation: Presentation) {
@@ -371,12 +403,8 @@ enum Presentation {
     }
 
     // MARK: - Transport Control
-    
-    func play() {
-        player.play()
-    }
 
-    func seek() {
+    func play() {
         player.play()
     }
 
@@ -384,11 +412,11 @@ enum Presentation {
         player.pause()
         saveCurrentProgress()
     }
-    
+
     func togglePlayback() {
         player.timeControlStatus == .paused ? play() : pause()
     }
-    
+
     // MARK: - Time Observation
     private func addTimeObserver() {
         removeTimeObserver()
@@ -396,7 +424,8 @@ enum Presentation {
         let timeInterval = CMTime(value: 1, timescale: 1)
         timeObserver = player
             .addPeriodicTimeObserver(forInterval: timeInterval, queue: .main) { time in
-                Task { @MainActor in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
                     if let duration = self.player.currentItem?.duration {
                         let isInProposalRange = time.seconds >= duration.seconds - 10.0
                         if self.shouldProposeNextVideo != isInProposalRange {
@@ -410,7 +439,7 @@ enum Presentation {
                 }
             }
     }
-    
+
     private func removeTimeObserver() {
         guard let timeObserver = timeObserver else { return }
         player.removeTimeObserver(timeObserver)

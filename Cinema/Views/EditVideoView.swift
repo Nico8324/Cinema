@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample’s licensing information.
+See the LICENSE.txt file for licensing information.
 
 Abstract:
 A view that lets a person edit a video's metadata after it's been added to the library.
@@ -26,17 +26,6 @@ struct EditVideoView: View {
 
     private static let contentRatings = ["NR", "G", "PG", "PG-13", "R", "TV-MA"]
 
-    private var yearText: Binding<String> {
-        Binding(
-            get: { String(video.yearOfRelease) },
-            set: { newValue in
-                if let year = Int(newValue) {
-                    video.yearOfRelease = year
-                }
-            }
-        )
-    }
-
     var body: some View {
         NavigationStack {
             List {
@@ -50,12 +39,10 @@ struct EditVideoView: View {
                 }
 
                 Section("Details") {
-                    #if os(iOS)
-                    TextField("Year", text: yearText)
+                    TextField("Year", value: $video.yearOfRelease, format: .number.grouping(.never))
+                        #if os(iOS)
                         .keyboardType(.numberPad)
-                    #else
-                    TextField("Year", text: yearText)
-                    #endif
+                        #endif
 
                     Picker("Content Rating", selection: $video.contentRating) {
                         ForEach(Self.contentRatings, id: \.self) { rating in
@@ -92,7 +79,10 @@ struct EditVideoView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
-                        try? context.save()
+                        // Sweep genres the edit may have emptied, so the Library's
+                        // filter row doesn't accumulate dead pills.
+                        Genre.deleteOrphaned(in: context)
+                        context.saveReportingErrors()
                         dismiss()
                     }
                 }
@@ -106,8 +96,7 @@ struct EditVideoView: View {
         } else if let existing = allGenres.first(where: { $0.name == name }) {
             video.genres.append(existing)
         } else {
-            let nextID = (allGenres.map(\.id).max() ?? -1) + 1
-            let genre = Genre(id: nextID, name: name)
+            let genre = Genre(name: name)
             context.insert(genre)
             video.genres.append(genre)
         }
@@ -115,7 +104,7 @@ struct EditVideoView: View {
 }
 
 #Preview(traits: .previewData) {
-    @Previewable @Query(sort: \Video.id) var videos: [Video]
+    @Previewable @Query(sort: \Video.name) var videos: [Video]
     return Group {
         if let video = videos.first {
             EditVideoView(video: video)

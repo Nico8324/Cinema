@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample’s licensing information.
+See the LICENSE.txt file for licensing information.
 
 Abstract:
 The main app structure.
@@ -14,7 +14,7 @@ import os
 struct Cinema: App {
     /// An object that manages the model storage configuration.
     private let modelContainer: ModelContainer
-    
+
     /// An object that controls the video playback behavior.
     @State private var player: PlayerModel
 
@@ -26,7 +26,7 @@ struct Cinema: App {
     /// The effect modifies the passthrough in immersive space.
     @State private var surroundingsEffect: SurroundingsEffect? = nil
     #endif
-    
+
     var body: some Scene {
         // The app's primary content window.
         WindowGroup {
@@ -57,7 +57,7 @@ struct Cinema: App {
         #if os(macOS)
         PlayerWindow(player: player)
         #endif
-        
+
         #if os(visionOS)
         // Defines an immersive space to present a destination in which to watch the video.
         ImmersiveSpace(id: ImmersiveEnvironmentView.id) {
@@ -82,19 +82,59 @@ struct Cinema: App {
         .immersionStyle(selection: .constant(.progressive), in: .progressive)
         #endif
     }
-    
-    /// Load video metadata and initialize the model container and video player model.
+
+    /// Initialize the model container and video player model.
     init() {
+        let modelContainer = Self.makeModelContainer()
+        self.modelContainer = modelContainer
+        self._player = State(initialValue: PlayerModel(modelContainer: modelContainer))
+        ProfileStore.migrateLegacyPhotoIfNeeded()
+    }
+
+    /// Opens the video library store, migrating it if needed.
+    ///
+    /// If the store can't be opened — a failed migration, corruption — the app must not crash
+    /// at launch: the imported video files on disk are the source of truth for the heavy data,
+    /// and the metadata is rebuildable. Instead, the broken store is moved aside and a fresh
+    /// one is created.
+    private static func makeModelContainer() -> ModelContainer {
         do {
-            let modelContainer = try ModelContainer(for: Video.self, Person.self, Genre.self, UpNextItem.self)
-            try Importer.importVideoMetadata(into: modelContainer.mainContext)
-            self._player = State(initialValue: PlayerModel(modelContainer: modelContainer))
-            self.modelContainer = modelContainer
+            return try openModelContainer()
         } catch {
-            fatalError(error.localizedDescription)
+            logger.error("Couldn't open the video library store: \(error.localizedDescription)")
+            moveBrokenStoreAside()
+            do {
+                return try openModelContainer()
+            } catch {
+                // Even a fresh store failed — something is wrong beyond the store itself.
+                fatalError("Couldn't create a video library store: \(error.localizedDescription)")
+            }
         }
+    }
+
+    private static func openModelContainer() throws -> ModelContainer {
+        let schema = Schema(versionedSchema: CinemaSchemaV3.self)
+        return try ModelContainer(
+            for: schema,
+            migrationPlan: CinemaMigrationPlan.self,
+            configurations: [ModelConfiguration(schema: schema)]
+        )
+    }
+
+    /// Renames the default store files so a fresh store can be created, preserving the broken
+    /// one on disk for potential recovery instead of destroying data.
+    private static func moveBrokenStoreAside() {
+        let storeURL = URL.applicationSupportDirectory.appending(path: "default.store")
+        let marker = UUID().uuidString
+        for suffix in ["", "-shm", "-wal"] {
+            let source = URL(filePath: storeURL.path + suffix)
+            guard FileManager.default.fileExists(atPath: source.path) else { continue }
+            let destination = URL(filePath: storeURL.path + ".broken-\(marker)" + suffix)
+            try? FileManager.default.moveItem(at: source, to: destination)
+        }
+        logger.error("Moved the unreadable video library store aside; starting with a fresh library.")
     }
 }
 
 /// A global log of events for the app.
-let logger = Logger()
+let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Cinema", category: "App")

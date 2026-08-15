@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample’s licensing information.
+See the LICENSE.txt file for licensing information.
 
 Abstract:
 A view that displays the list of videos the library contains in a grid.
@@ -25,13 +25,20 @@ struct LibraryView: View {
     @State private var navigationPath = [NavigationNode]()
     @State private var selectedGenre: Genre?
     @State private var isPickingFile = false
+    @State private var isAddingYouTubeVideo = false
     @State private var importErrorMessage: String?
+    @State private var importProgress = ImportProgress()
 
     // Adapt the number columns based on platform and size class.
     private var columns: [GridItem] {
         let gridItem = GridItem(.flexible(), spacing: Constants.cardSpacing)
         let count = horizontalSizeClass == .compact ? Constants.libraryColumnCountCompact : Constants.libraryColumnCount
         return [GridItem](repeating: gridItem, count: count)
+    }
+
+    /// The videos to display, filtered by the selected genre, alphabetically.
+    private var displayedVideos: [Video] {
+        selectedGenre?.videos.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending } ?? allVideos
     }
 
     var body: some View {
@@ -55,7 +62,7 @@ struct LibraryView: View {
                                     }
                                     .buttonStyle(PickerButtonStyle(isSelected: selectedGenre == nil))
 
-                                    ForEach(genres.sorted { $0.localizedName < $1.localizedName }) { genre in
+                                    ForEach(genres) { genre in
                                         Button(genre.localizedName) {
                                             selectedGenre = genre
                                         }
@@ -67,16 +74,14 @@ struct LibraryView: View {
                             .scrollClipDisabled()
                             .padding(.bottom)
 
-                            // Filter videos using the genre a person selects.
-                            let videos = selectedGenre?.videos.sorted(by: { $0.id < $1.id }) ?? allVideos.sorted { $0.localizedName < $1.localizedName }
                             LazyVGrid(columns: columns, spacing: Constants.cardSpacing) {
-                                ForEach(videos) { video in
+                                ForEach(displayedVideos) { video in
                                     NavigationLink(value: NavigationNode.video(video.id)) {
                                         VideoCardView(video: video, style: .grid)
                                     }
                                     .transitionSource(id: video.id, namespace: namespace)
-                                    .accessibilityLabel(video.localizedName)
-                                    .buttonStyle(buttonStyle)
+                                    .accessibilityLabel(video.name)
+                                    .buttonStyle(.plain)
                                 }
                             }
                         }
@@ -87,11 +92,29 @@ struct LibraryView: View {
                 }
             }
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        isPickingFile = true
-                    } label: {
-                        Label("Add Video", systemImage: "plus")
+                ToolbarItem(placement: .primaryAction) {
+                    // While an import runs, the add button becomes a progress ring.
+                    // Both states live inside button chrome so they share the same
+                    // circular toolbar treatment; the ring state just doesn't act.
+                    if let fraction = importProgress.fraction {
+                        Button {} label: {
+                            ImportProgressRing(fraction: fraction)
+                        }
+                    } else {
+                        Menu {
+                            Button {
+                                isPickingFile = true
+                            } label: {
+                                Label("Choose Files", systemImage: "folder")
+                            }
+                            Button {
+                                isAddingYouTubeVideo = true
+                            } label: {
+                                Label("From YouTube Link", systemImage: "link")
+                            }
+                        } label: {
+                            Label("Add Video", systemImage: "plus")
+                        }
                     }
                 }
             }
@@ -101,6 +124,9 @@ struct LibraryView: View {
                 allowsMultipleSelection: true,
                 onCompletion: handlePickedFiles
             )
+            .sheet(isPresented: $isAddingYouTubeVideo) {
+                AddYouTubeVideoView()
+            }
             .alert(
                 "Couldn’t Add Video",
                 isPresented: .init(
@@ -116,110 +142,66 @@ struct LibraryView: View {
         }
     }
 
-    var buttonStyle: some PrimitiveButtonStyle {
-        #if os(tvOS)
-        .card
-        #else
-        .plain
-        #endif
-    }
-
     private func handlePickedFiles(_ result: Result<[URL], Error>) {
         switch result {
         case .failure(let error):
             importErrorMessage = error.localizedDescription
 
         case .success(let sourceURLs):
+            importProgress.begin()
             Task {
-                await importVideos(from: sourceURLs)
+                let importStart = ContinuousClock.now
+                // The copy and duration probe run off the main actor; only the
+                // model inserts and thumbnail bookkeeping happen back here.
+                let progress = importProgress
+                let outcome = await VideoImporter.importFiles(from: sourceURLs) { fraction in
+                    Task { @MainActor in
+                        progress.update(to: fraction)
+                    }
+                }
+                let newVideos = VideoImporter.addVideos(for: outcome.imported, to: context)
+                for video in newVideos {
+                    VideoImporter.generateThumbnail(for: video, in: context)
+                }
+                // Small files copy in milliseconds; hold the full ring briefly so the
+                // progress indicator reads as a state, not a glitch.
+                let minimumRingTime: Duration = .milliseconds(750)
+                let elapsed = ContinuousClock.now - importStart
+                if elapsed < minimumRingTime {
+                    try? await Task.sleep(for: minimumRingTime - elapsed)
+                }
+                importProgress.end()
+                if !outcome.failures.isEmpty {
+                    importErrorMessage = outcome.failures.joined(separator: "\n")
+                }
             }
         }
     }
+}
 
-    private func importVideos(from sourceURLs: [URL]) async {
-        var nextID = (allVideos.map(\.id).max() ?? -1) + 1
-        var failures: [String] = []
+/// A determinate progress ring in the App Store download style — a faint circular
+/// track with the tint-colored arc filling clockwise from 12 o'clock — replacing
+/// the add button's icon while files copy in.
+private struct ImportProgressRing: View {
+    let fraction: Double
 
-        for sourceURL in sourceURLs {
-            do {
-                let filename = try importFile(from: sourceURL)
-                let name = sourceURL.deletingPathExtension().lastPathComponent
-                let videoURL = URL.applicationSupportDirectory
-                    .appending(path: "Videos", directoryHint: .isDirectory)
-                    .appending(path: filename, directoryHint: .notDirectory)
-                let duration = await ThumbnailGenerator.duration(for: videoURL)
+    private static let lineWidth: CGFloat = 2.25
 
-                let video = Video(
-                    id: nextID,
-                    name: name,
-                    synopsis: name,
-                    // Store just a filename marker, not an absolute path — see Video.resolvedURL.
-                    url: URL(string: "file://\(filename)")!,
-                    imageName: "",
-                    yearOfRelease: Calendar.current.component(.year, from: Date()),
-                    duration: duration,
-                    isFeatured: true
-                )
-                context.insert(video)
-                nextID += 1
-
-                generateThumbnail(for: video, filename: filename)
-            } catch {
-                failures.append("\(sourceURL.lastPathComponent): \(error.localizedDescription)")
-            }
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(.quaternary, lineWidth: Self.lineWidth)
+            Circle()
+                // Show a small starting arc immediately so the ring reads as
+                // determinate progress from the first frame.
+                .trim(from: 0, to: max(fraction, 0.03))
+                .stroke(.tint, style: StrokeStyle(lineWidth: Self.lineWidth, lineCap: .round))
+                .rotationEffect(.degrees(-90))
         }
-
-        try? context.save()
-
-        if !failures.isEmpty {
-            importErrorMessage = failures.joined(separator: "\n")
-        }
-    }
-
-    /// Extracts a representative poster frame from the imported video and saves it, updating the video once ready.
-    private func generateThumbnail(for video: Video, filename: String) {
-        Task {
-            let videoURL = URL.applicationSupportDirectory
-                .appending(path: "Videos", directoryHint: .isDirectory)
-                .appending(path: filename, directoryHint: .notDirectory)
-
-            guard let thumbnailData = await ThumbnailGenerator.generateThumbnailData(for: videoURL) else { return }
-
-            let thumbnailsDirectory = URL.applicationSupportDirectory.appending(path: "Thumbnails", directoryHint: .isDirectory)
-            do {
-                try FileManager.default.createDirectory(at: thumbnailsDirectory, withIntermediateDirectories: true)
-                let thumbnailURL = thumbnailsDirectory
-                    .appending(path: filename, directoryHint: .notDirectory)
-                    .deletingPathExtension()
-                    .appendingPathExtension("jpg")
-                try thumbnailData.write(to: thumbnailURL)
-
-                video.hasThumbnail = true
-                try context.save()
-            } catch {
-                // The video still works without a thumbnail — just leave the fallback poster in place.
-            }
-        }
-    }
-
-    /// Copies a security-scoped, user-picked file into the app's own storage so it remains accessible after this session ends.
-    /// Returns the stored filename (not an absolute path — the sandbox container path isn't stable across reinstalls).
-    private func importFile(from sourceURL: URL) throws -> String {
-        let didStartAccessing = sourceURL.startAccessingSecurityScopedResource()
-        defer {
-            if didStartAccessing {
-                sourceURL.stopAccessingSecurityScopedResource()
-            }
-        }
-
-        let videosDirectory = URL.applicationSupportDirectory.appending(path: "Videos", directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: videosDirectory, withIntermediateDirectories: true)
-
-        let filename = UUID().uuidString + "." + sourceURL.pathExtension
-        let destinationURL = videosDirectory.appending(path: filename, directoryHint: .notDirectory)
-
-        try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
-        return filename
+        .frame(width: 17, height: 17)
+        .animation(.smooth(duration: 0.3), value: fraction)
+        .accessibilityLabel("Importing videos")
+        .accessibilityValue("\(Int(fraction * 100)) percent")
     }
 }
 

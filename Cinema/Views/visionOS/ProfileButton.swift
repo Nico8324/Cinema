@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample’s licensing information.
+See the LICENSE.txt file for licensing information.
 
 Abstract:
 A view that presents an expanding profile button.
@@ -34,12 +34,14 @@ private struct ProfileIconView: View {
 
 /// A view that displays the expanded profile button.
 private struct ProfileDetailView: View {
+    @AppStorage(ProfileStore.nameKey) private var profileName: String = ""
+
     var body: some View {
         VStack(alignment: .leading) {
-            Text("Anne Johnson")
+            Text(profileName.isEmpty ? String(localized: "Profile") : profileName)
                 .font(.body)
                 .foregroundStyle(.primary)
-            Text("Switch profiles")
+            Text("Edit profile")
                 .font(.footnote)
                 .foregroundStyle(.tertiary)
         }

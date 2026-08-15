@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample’s licensing information.
+See the LICENSE.txt file for licensing information.
 
 Abstract:
 A view that displays a simple inline video player with custom controls.
@@ -11,9 +11,9 @@ import SwiftUI
 
 ///  A view that displays a simple inline video player with custom controls.
 struct InlinePlayerView: View {
-    
+
     @Environment(PlayerModel.self) private var model
-    
+
     var body: some View {
         ZStack {
             // A view that uses `AVPlayerViewController` to display the video content without controls.
@@ -31,38 +31,43 @@ struct InlinePlayerView: View {
     }
 }
 
-/// A view that defines a simple play/pause/replay button for the trailer player.
+/// A view that defines a simple play/pause button for the trailer player,
+/// fading out a few seconds after playback starts.
 struct InlineControlsView: View {
-    
+
     @Environment(PlayerModel.self) private var player
-    @State private var isShowingControls = false
-    
+    @State private var isShowingControls = true
+    @State private var hideControlsTask: Task<Void, Never>?
+
     var body: some View {
-        VStack {
-            Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                .padding(8)
-                .background(.thinMaterial)
-                .clipShape(.circle)
-                    
-        }
-        .font(.largeTitle)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            player.togglePlayback()
-            isShowingControls = true
-            // Execute the code below on the next runloop cycle.
-            Task { @MainActor in
-                if player.isPlaying {
-                    dismissAfterDelay()
+        Color.clear
+            .contentShape(Rectangle())
+            .overlay {
+                if isShowingControls {
+                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.largeTitle)
+                        .padding(8)
+                        .background(.thinMaterial)
+                        .clipShape(.circle)
+                        .transition(.opacity)
                 }
             }
-        }
+            .onTapGesture {
+                player.togglePlayback()
+                withAnimation {
+                    isShowingControls = true
+                }
+                scheduleHide()
+            }
     }
-    
-    func dismissAfterDelay() {
-        Task {
-            try! await Task.sleep(for: .seconds(3.0))
+
+    /// Hides the controls after a delay, as long as playback is still running.
+    /// Re-tapping restarts the countdown.
+    private func scheduleHide() {
+        hideControlsTask?.cancel()
+        hideControlsTask = Task {
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled, player.isPlaying else { return }
             withAnimation(.easeOut(duration: 0.3)) {
                 isShowingControls = false
             }
@@ -76,16 +81,16 @@ struct InlineControlsView: View {
 /// of `AVPlayerViewController`. It removes the view controller's default controls
 /// so it can draw custom controls over the video content.
 private struct VideoContentView: UIViewControllerRepresentable {
-    
+
     @Environment(PlayerModel.self) private var model
-    
+
     func makeUIViewController(context: Context) -> AVPlayerViewController {
         let controller = model.makePlayerUI()
         // Remove the default system playback controls.
         controller.showsPlaybackControls = false
         return controller
     }
-    
+
     func updateUIViewController(_ uiViewController: AVPlayerViewController, context: Context) {}
 }
 

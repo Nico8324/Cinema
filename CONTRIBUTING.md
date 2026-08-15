@@ -32,6 +32,16 @@ Open an issue using the feature request template. Describe the problem you're tr
 - Prefer small, readable diffs over large refactors bundled with feature work.
 - Don't add abstractions or configuration for hypothetical future needs.
 
+## Versioning
+
+Cinema follows [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`) and is currently in initial development (`0.x.y`):
+
+- **Patch** (`0.0.x`): Bug fixes, stability, and polish. Nothing new to do — just fixing or smoothing out what's already there.
+- **Minor** (`0.x.0`): A new feature lands, even if the app as a whole is still rough. Anything that expands what Cinema can actually do.
+- **Major** (`1.0.0`): Reserved for the first release considered complete and reliable enough for regular daily use — the core loop (add, browse, watch, resume, edit, delete a video) works end-to-end with no known rough edges. Past `1.0.0`, further major bumps are reserved for changes big enough to break compatibility with existing data or expectations (for example, a data model change that requires resetting the library).
+
+When cutting a release: bump `MARKETING_VERSION` in `Cinema.xcodeproj/project.pbxproj` (both Debug and Release configs), add a dated entry to [CHANGELOG.md](CHANGELOG.md), then tag (`git tag -a vX.Y.Z`) and publish a GitHub Release from that tag using the changelog entry as its notes.
+
 ## Development setup
 
 This is a multiplatform SwiftUI app (iOS, iPadOS, macOS, tvOS, and visionOS). Open `Cinema.xcodeproj` in a recent version of Xcode, pick a target/scheme, and build.

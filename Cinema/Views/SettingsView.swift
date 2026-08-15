@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample’s licensing information.
+See the LICENSE.txt file for licensing information.
 
 Abstract:
 A view that presents app settings, library management, and about info.
@@ -15,8 +15,7 @@ struct SettingsView: View {
 
     @Query private var videos: [Video]
 
-    @AppStorage("profileName") private var profileName: String = "Anne Johnson"
-    @AppStorage("profileImageData") private var profileImageData: Data?
+    @AppStorage(ProfileStore.nameKey) private var profileName: String = ""
 
     @State private var isConfirmingClear = false
 
@@ -36,11 +35,11 @@ struct SettingsView: View {
                         EditProfileView()
                     } label: {
                         HStack(spacing: 12) {
-                            profileImage
+                            ProfileImageView()
                                 .frame(width: 44, height: 44)
                                 .clipShape(Circle())
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(profileName)
+                                Text(profileName.isEmpty ? String(localized: "Set Up Your Profile") : profileName)
                                 Text("Edit profile")
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
@@ -90,27 +89,14 @@ struct SettingsView: View {
         }
     }
 
-    private var profileImage: some View {
-        Group {
-            if let profileImageData, let platformImage = PlatformImage(data: profileImageData) {
-                Image(platformImage: platformImage)
-                    .resizable()
-            } else {
-                Image(systemName: "person.crop.circle.fill")
-                    .resizable()
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .scaledToFill()
-    }
-
     /// Deletes every video from the library, including the locally imported files and thumbnails backing them.
     private func clearLibrary() {
         for video in videos {
             video.removeLocalFiles()
             context.delete(video)
         }
-        try? context.save()
+        Genre.deleteOrphaned(in: context)
+        context.saveReportingErrors()
     }
 }
 

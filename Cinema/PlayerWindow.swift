@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample’s licensing information.
+See the LICENSE.txt file for licensing information.
 
 Abstract:
 A window that contains the video player for macOS.
@@ -19,7 +19,9 @@ struct PlayerWindow: Scene {
             PlayerView()
                 .environment(player)
                 .onAppear {
-                    player.play()
+                    if player.shouldAutoPlay {
+                        player.play()
+                    }
                 }
                 .onDisappear {
                     player.reset()

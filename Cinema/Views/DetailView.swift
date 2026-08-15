@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample’s licensing information.
+See the LICENSE.txt file for licensing information.
 
 Abstract:
 A view that presents the video content details.
@@ -19,30 +19,33 @@ struct DetailView: View {
         horizontalSizeClass == .compact
     }
 
-    @State var video: Video
+    // `Video` is an observable model class — a plain `let` still drives updates.
+    let video: Video
+
     @State private var viewSize: CGSize = CGSize(width: 0, height: 0)
     @State private var isConfirmingDelete = false
     @State private var isEditing = false
-    
+    @State private var isMatchingMetadata = false
+
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack {
                 VStack(alignment: .leading, spacing: Constants.verticalTextSpacing) {
-                    Text(video.localizedName)
+                    Text(video.name)
                         .font(isCompact ? .title : .largeTitle)
                         .bold()
-                    
-                    Text("\(video.formattedYearOfRelease) | \(video.localizedContentRating) | \(video.formattedDuration)",
+
+                    Text("\(video.formattedYearOfRelease) | \(video.contentRating) | \(video.formattedDuration)",
                          comment: "Release Year | Rating | Duration")
                     .font(.headline)
                     .accessibilityLabel("""
-                                        Released \(video.formattedYearOfRelease), rated \(video.localizedContentRating), \
-                                        \(video.duration) seconds
+                                        Released \(video.formattedYearOfRelease), rated \(video.contentRating), \
+                                        \(video.accessibleDuration)
                                         """)
-                    
+
                     GenreView(genres: video.genres)
-                    
-                    Text(video.localizedSynopsis)
+
+                    Text(video.synopsis)
                         .multilineTextAlignment(.leading)
                         .font(isCompact ? .body : .headline)
                         .fontWeight(.semibold)
@@ -71,7 +74,7 @@ struct DetailView: View {
                     // Make the buttons the same width.
                     .fixedSize(horizontal: true, vertical: false)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    
+
                 }
                 .padding(isCompact ? Constants.detailCompactPadding : Constants.detailPadding)
                 .padding(.bottom, isCompact ? Constants.detailCompactPadding : 0)
@@ -79,31 +82,20 @@ struct DetailView: View {
                 .frame(height: viewSize.height, alignment: .bottom)
                 .background(alignment: .bottom) { backgroundView }
 
-                #if !os(tvOS)
-                VStack(alignment: .leading, spacing: Constants.verticalTextSpacing) {
-                    #if os(visionOS)
-                    Text("Extras")
-                        .font(.headline)
-                    
-                    // A view that plays video in an inline presentation.
-                    TrailerView(video: video)
-                        .aspectRatio(16 / 9, contentMode: .fit)
-                        .frame(maxWidth: Constants.trailerHeight)
-                        .cornerRadius(Constants.cornerRadius)
-                    #endif
-                    
-                    Text("Cast & Crew")
-                        .font(.headline)
-                    
-                    RoleView(role: String(localized: "Stars", comment: "A participant in making a video."), people: video.actors)
-                    RoleView(role: String(localized: "Director", comment: "A participant in making a video."), people: video.directors)
-                    RoleView(role: String(localized: "Writers", comment: "A participant in making a video."), people: video.writers)
-                    
+                // The movie's trailer, when a TMDB match provided one. Plays inline,
+                // in place, with system controls (including expand-to-full-screen).
+                if let trailerYouTubeID = video.trailerYouTubeID {
+                    VStack(alignment: .leading, spacing: Constants.verticalTextSpacing) {
+                        Text("Trailer")
+                            .font(.headline)
+
+                        InlineTrailerView(youtubeID: trailerYouTubeID)
+                            .frame(maxWidth: Constants.trailerHeight)
+                    }
+                    .padding(isCompact ? Constants.detailCompactPadding : Constants.detailPadding)
+                    .padding(.bottom, isCompact ? Constants.detailCompactPadding : 0)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(isCompact ? Constants.detailCompactPadding : Constants.detailPadding)
-                .padding(.bottom, isCompact ? Constants.detailCompactPadding : 0)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                #endif
             }
             #if os(iOS)
             .background(.black)
@@ -122,10 +114,13 @@ struct DetailView: View {
         .navigationTitle("")
         .toolbarBackground(.hidden)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button("Edit Video", systemImage: "pencil") {
                         isEditing = true
+                    }
+                    Button("Match Metadata", systemImage: "sparkles.rectangle.stack") {
+                        isMatchingMetadata = true
                     }
                     Button("Delete Video", systemImage: "trash", role: .destructive) {
                         isConfirmingDelete = true
@@ -136,7 +131,7 @@ struct DetailView: View {
             }
         }
         .confirmationDialog(
-            "Delete “\(video.localizedName)”?",
+            "Delete “\(video.name)”?",
             isPresented: $isConfirmingDelete,
             titleVisibility: .visible
         ) {
@@ -149,30 +144,30 @@ struct DetailView: View {
         .sheet(isPresented: $isEditing) {
             EditVideoView(video: video)
         }
+        .sheet(isPresented: $isMatchingMetadata) {
+            TMDBSearchView(video: video)
+        }
     }
 
-    /// Deletes the video, including the locally imported file and thumbnail backing it, and dismisses.
+    /// Dismisses first, then deletes the video (including the locally imported file and
+    /// thumbnail backing it) on the next run-loop cycle — deleting a model this view still
+    /// displays mid-dismissal risks faulting a deleted object during the transition.
     private func deleteVideo() {
-        video.removeLocalFiles()
-        context.delete(video)
-        try? context.save()
         dismiss()
+        Task {
+            video.removeLocalFiles()
+            context.delete(video)
+            Genre.deleteOrphaned(in: context)
+            context.saveReportingErrors()
+        }
     }
-    
-    /// Returns a background image for the view orientation.
-    private var backgroundImage: Image {
-        let usePortrait = viewSize.height > viewSize.width
-        return (usePortrait ? video.portraitImage : video.landscapeImage).resizable()
-    }
-    
+
     private var backgroundView: some View {
         Group {
-            backgroundImage
-                .scaledToFill()
+            PosterImageView(video: video)
                 .frame(width: viewSize.width, height: viewSize.height)
-                .clipped()
                 .accessibilityHidden(true)
-            
+
             // Add a subtle gradient to make the text stand out.
             #if os(iOS)
             GradientView(style: .black.opacity(0.6), direction: .horizontal, width: Constants.gradientSize, startPoint: .leading)
@@ -187,11 +182,10 @@ struct DetailView: View {
 }
 
 #Preview(traits: .previewData) {
-    @Previewable @Query(sort: \Video.id) var videos: [Video]
+    @Previewable @Query(sort: \Video.name) var videos: [Video]
     return Group {
         if let video = videos.first {
             DetailView(video: video)
         }
     }
 }
-

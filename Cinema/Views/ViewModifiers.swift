@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample’s licensing information.
+See the LICENSE.txt file for licensing information.
 
 Abstract:
 Custom view modifiers that the app defines.
@@ -19,12 +19,12 @@ extension View {
         #endif
     }
     #endif
-    
+
     func navigationDestinationVideo(in namespace: Namespace.ID) -> some View {
         self.modifier(NavigationDestinationVideo(namespace: namespace))
     }
 
-    func transitionSource(id: Int, namespace: Namespace.ID) -> some View {
+    func transitionSource(id: Video.ID, namespace: Namespace.ID) -> some View {
         self.modifier(TransitionSourceModifier(id: id, namespace: namespace))
     }
 }
@@ -33,13 +33,15 @@ extension View {
 private struct FullScreenCoverModifier: ViewModifier {
     @Environment(PlayerModel.self) private var player
     @State private var isPresentingPlayer = false
-    
+
     func body(content: Content) -> some View {
         content
             .fullScreenCover(isPresented: $isPresentingPlayer) {
                 PlayerView()
                     .onAppear {
-                        player.play()
+                        if player.shouldAutoPlay {
+                            player.play()
+                        }
                     }
                     .onDisappear {
                         player.reset()
@@ -58,27 +60,13 @@ private struct FullScreenCoverModifier: ViewModifier {
 private struct NavigationDestinationVideo: ViewModifier {
     @Environment(\.modelContext) private var context
     var namespace: Namespace.ID
-    
+
     func body(content: Content) -> some View {
         content
             .navigationDestination(for: NavigationNode.self) { node in
                 switch node {
-                case .category(let id):
-                    if let category = Category(rawValue: id) {
-                        CategoryView(
-                            category: category,
-                            namespace: namespace,
-                            navigationPath: [NavigationNode.category(id)])
-                            #if os(iOS)
-                            .toolbarRole(.editor)
-                            .navigationTransition(.zoom(sourceID: category.id, in: namespace))
-                            #endif
-                    } else {
-                        ContentUnavailableView("This category isn’t available", systemImage: "list.and.film")
-                    }
-                    
                 case .video(let id):
-                    let descriptor = FetchDescriptor<Video>(predicate: #Predicate<Video> { $0.id == id })
+                    let descriptor = FetchDescriptor<Video>(predicate: #Predicate<Video> { $0.uuid == id })
                     if let video = try? context.fetch(descriptor).first {
                         DetailView(video: video)
                             #if os(iOS)
@@ -94,7 +82,7 @@ private struct NavigationDestinationVideo: ViewModifier {
 }
 
 private struct TransitionSourceModifier: ViewModifier {
-    var id: Int
+    var id: Video.ID
     var namespace: Namespace.ID
 
     func body(content: Content) -> some View {
@@ -114,7 +102,7 @@ private struct TransitionSourceModifier: ViewModifier {
 private struct OpenVideoPlayerModifier: ViewModifier {
     @Environment(PlayerModel.self) private var player
     @Environment(\.openWindow) private var openWindow
-    
+
     func body(content: Content) -> some View {
         content
             .onChange(of: player.presentation, { oldValue, newValue in
