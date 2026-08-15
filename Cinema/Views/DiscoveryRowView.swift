@@ -80,6 +80,7 @@ private struct DiscoveryMovieSheet: View {
     let movie: TMDB.Movie
 
     @State private var trailerYouTubeID: String?
+    @State private var moviePage: TMDB.MoviePage?
 
     var body: some View {
         NavigationStack {
@@ -99,10 +100,17 @@ private struct DiscoveryMovieSheet: View {
                         Text(movie.title)
                             .font(.title2.bold())
 
-                        if let year = movie.year {
-                            Text(String(year))
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                        // The movie's key facts, filled in as the page loads.
+                        HStack(alignment: .top, spacing: Constants.outerPadding * 2) {
+                            if let year = movie.year {
+                                FactView(label: String(localized: "Released"), value: String(year))
+                            }
+                            if let runtime = moviePage?.formattedRuntime {
+                                FactView(label: String(localized: "Runtime"), value: runtime)
+                            }
+                            if let score = moviePage?.formattedScore {
+                                FactView(label: String(localized: "Score"), value: score)
+                            }
                         }
 
                         if !movie.overview.isEmpty {
@@ -120,8 +128,13 @@ private struct DiscoveryMovieSheet: View {
                         }
                     }
                     .padding(.horizontal, Constants.outerPadding)
-                    .padding(.bottom, Constants.outerPadding)
+
+                    if let people = moviePage?.people, !people.isEmpty {
+                        CastRow(people: people)
+                            .padding(.top, Constants.verticalTextSpacing)
+                    }
                 }
+                .padding(.bottom, Constants.outerPadding)
             }
             .ignoresSafeArea(edges: .top)
             .toolbar {
@@ -132,7 +145,10 @@ private struct DiscoveryMovieSheet: View {
                 }
             }
             .task {
-                trailerYouTubeID = try? await TMDB.trailerYouTubeID(forMovieID: movie.id)
+                async let trailer = TMDB.trailerYouTubeID(forMovieID: movie.id)
+                async let page = TMDB.moviePage(forMovieID: movie.id)
+                trailerYouTubeID = try? await trailer
+                moviePage = try? await page
             }
         }
         .preferredColorScheme(.dark)

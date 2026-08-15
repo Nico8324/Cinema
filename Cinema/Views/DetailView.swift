@@ -103,7 +103,11 @@ struct DetailView: View {
                 // Cast, crew, and movie facts from TMDB, for matched videos.
                 if let moviePage {
                     if !moviePage.people.isEmpty {
-                        CastRow(people: moviePage.people, isCompact: isCompact)
+                        CastRow(
+                            people: moviePage.people,
+                            horizontalPadding: isCompact ? Constants.detailCompactPadding : Constants.detailPadding
+                        )
+                        .padding(.bottom, isCompact ? Constants.detailCompactPadding : 0)
                     }
                     InformationSection(video: video, page: moviePage, isCompact: isCompact)
                 }
@@ -201,68 +205,6 @@ struct DetailView: View {
     }
 }
 
-/// A horizontally scrolling row of cast and crew — circular photos with
-/// name and role, in the TV-app style.
-private struct CastRow: View {
-    let people: [TMDB.CreditedPerson]
-    let isCompact: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Constants.verticalTextSpacing) {
-            Text("Cast & Crew")
-                .font(.headline)
-                .padding(.horizontal, isCompact ? Constants.detailCompactPadding : Constants.detailPadding)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: Constants.cardSpacing) {
-                    ForEach(people) { person in
-                        PersonCard(person: person)
-                    }
-                }
-                .padding(.horizontal, isCompact ? Constants.detailCompactPadding : Constants.detailPadding)
-            }
-            .scrollClipDisabled()
-        }
-        .padding(.bottom, isCompact ? Constants.detailCompactPadding : 0)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-private struct PersonCard: View {
-    let person: TMDB.CreditedPerson
-
-    var body: some View {
-        VStack(spacing: 6) {
-            AsyncImage(url: person.profileURL) { image in
-                image
-                    .resizable()
-                    .scaledToFill()
-            } placeholder: {
-                ZStack {
-                    Color(white: 0.15)
-                    Image(systemName: "person.fill")
-                        .font(.title2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .frame(width: 76, height: 76)
-            .clipShape(Circle())
-
-            Text(person.name)
-                .font(.caption.bold())
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-
-            Text(person.role)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-        }
-        .frame(width: 90)
-    }
-}
-
 /// Movie facts — released, runtime, rating, score — in the TV-app's
 /// label-over-value style.
 private struct InformationSection: View {
@@ -276,33 +218,22 @@ private struct InformationSection: View {
                 .font(.headline)
 
             HStack(alignment: .top, spacing: Constants.outerPadding * 2) {
-                fact(String(localized: "Released"), video.formattedYearOfRelease)
+                FactView(label: String(localized: "Released"), value: video.formattedYearOfRelease)
 
-                if let runtime = page.runtime, runtime > 0 {
-                    fact(String(localized: "Runtime"),
-                         Duration.seconds(runtime * 60).formatted(.units(allowed: [.hours, .minutes], width: .narrow)))
+                if let runtime = page.formattedRuntime {
+                    FactView(label: String(localized: "Runtime"), value: runtime)
                 }
 
-                fact(String(localized: "Rated"), video.contentRating)
+                FactView(label: String(localized: "Rated"), value: video.contentRating)
 
-                if let score = page.voteAverage, score > 0 {
-                    fact(String(localized: "Score"), String(format: "★ %.1f", score))
+                if let score = page.formattedScore {
+                    FactView(label: String(localized: "Score"), value: score)
                 }
             }
         }
         .padding(isCompact ? Constants.detailCompactPadding : Constants.detailPadding)
         .padding(.bottom, isCompact ? Constants.detailCompactPadding : Constants.detailPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func fact(_ label: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.subheadline.weight(.semibold))
-        }
     }
 }
 
