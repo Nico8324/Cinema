@@ -30,11 +30,27 @@ struct DetailView: View {
     /// The TMDB movie page (cast, runtime, score) for matched videos, fetched live.
     @State private var moviePage: TMDB.MoviePage?
 
+    private var playButtonTitle: LocalizedStringKey {
+        switch (video.isEpisode, video.isPartiallyWatched) {
+        case (true, true): "Resume Episode"
+        case (true, false): "Play Episode"
+        case (false, true): "Resume Movie"
+        case (false, false): "Play Movie"
+        }
+    }
+
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack {
                 VStack(alignment: .leading, spacing: Constants.verticalTextSpacing) {
-                    Text(video.name)
+                    // Matched episodes lead with their own title, show name above.
+                    if video.isEpisode, video.episodeTitle != nil {
+                        Text(video.name)
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Text(video.episodeTitle ?? video.name)
                         .font(isCompact ? .title : .largeTitle)
                         .bold()
 
@@ -62,7 +78,8 @@ struct DetailView: View {
                             /// Load the media item for full-window presentation.
                             player.loadVideo(video, presentation: .fullWindow)
                         } label: {
-                            Label(video.isPartiallyWatched ? "Resume Movie" : "Play Movie", systemImage: "play.fill")
+                            // Episodes get episode wording; the movie labels stay for movies.
+                            Label(playButtonTitle, systemImage: "play.fill")
                         }
                         // A button that toggles whether the video is in the Up Next queue.
                         Button {

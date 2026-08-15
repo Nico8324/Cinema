@@ -51,7 +51,9 @@ struct LibraryView: View {
         var sortKey: String {
             switch self {
             case .movie(let video): video.name
-            case .show(let name, _): name
+            // Sort and display by the official title once matched; the
+            // associated name stays the stable grouping key.
+            case .show(let name, let episodes): episodes.first?.name ?? name
             }
         }
     }
@@ -115,9 +117,9 @@ struct LibraryView: View {
 
                                     case .show(let name, let episodes):
                                         NavigationLink(value: NavigationNode.show(name)) {
-                                            ShowCardView(name: name, episodes: episodes)
+                                            ShowCardView(name: episodes.first?.name ?? name, episodes: episodes)
                                         }
-                                        .accessibilityLabel(name)
+                                        .accessibilityLabel(episodes.first?.name ?? name)
                                         .buttonStyle(.plain)
                                     }
                                 }

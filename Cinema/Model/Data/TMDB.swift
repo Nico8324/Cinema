@@ -239,13 +239,13 @@ enum TMDB {
         let trailerYouTubeID: String?
     }
 
-    private static let decoder: JSONDecoder = {
+    static let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return decoder
     }()
 
-    private static func endpoint(_ path: String, query: [URLQueryItem] = []) -> URL {
+    static func endpoint(_ path: String, query: [URLQueryItem] = []) -> URL {
         var components = URLComponents(string: "https://api.themoviedb.org/3\(path)")!
         components.queryItems = [URLQueryItem(name: "api_key", value: Secrets.tmdbAPIKey)] + query
         return components.url!
@@ -348,7 +348,12 @@ enum TMDB {
     }
 
     private static func fetchDetails(movieID: Int) async throws -> MovieDetails {
-        let (data, _) = try await URLSession.shared.data(from: endpoint("/movie/\(movieID)"))
+        // Localized like every other detail endpoint, so applied movie genres
+        // match the language TV genres arrive in.
+        let url = endpoint("/movie/\(movieID)", query: [
+            URLQueryItem(name: "language", value: Locale.preferredLanguages.first ?? "en-US")
+        ])
+        let (data, _) = try await URLSession.shared.data(from: url)
         return try decoder.decode(MovieDetails.self, from: data)
     }
 
@@ -387,14 +392,14 @@ enum TMDB {
         }
 
         applyGenres(named: match.genreNames, to: video, in: context)
-        applyBackdrop(match.backdropData, to: video)
+        applyArtwork(match.backdropData, to: video)
 
         Genre.deleteOrphaned(in: context)
         context.saveReportingErrors()
     }
 
     @MainActor
-    private static func applyGenres(named names: [String], to video: Video, in context: ModelContext) {
+    static func applyGenres(named names: [String], to video: Video, in context: ModelContext) {
         guard !names.isEmpty else { return }
         let existingGenres = (try? context.fetch(FetchDescriptor<Genre>())) ?? []
         video.genres = names.map { name in
@@ -407,10 +412,10 @@ enum TMDB {
         }
     }
 
-    /// Replaces the generated thumbnail with the TMDB backdrop, invalidating caches
-    /// so every surface picks up the new art.
+    /// Replaces the generated thumbnail with TMDB artwork (a movie backdrop or an
+    /// episode still), invalidating caches so every surface picks up the new art.
     @MainActor
-    private static func applyBackdrop(_ data: Data?, to video: Video) {
+    static func applyArtwork(_ data: Data?, to video: Video) {
         guard let data, let filename = video.thumbnailFilename else { return }
         do {
             try FileManager.default.createDirectory(at: MediaStore.thumbnailsDirectory, withIntermediateDirectories: true)

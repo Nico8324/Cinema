@@ -54,6 +54,10 @@ final class Video: Identifiable {
     var seasonNumber: Int?
     /// For TV episodes: the episode number parsed from the filename ("E02").
     var episodeNumber: Int?
+    /// The TMDB show this episode's show was matched to, if any.
+    var tmdbShowID: Int?
+    /// The episode's own title from TMDB, like "The Engineer".
+    var episodeTitle: String?
     /// Whether a poster thumbnail has been generated from the video file itself (see `ThumbnailGenerator`).
     /// Generation happens asynchronously after import, so this starts `false` and flips once the file lands on disk.
     var hasThumbnail: Bool = false
@@ -92,6 +96,8 @@ final class Video: Identifiable {
         self.showName = showName
         self.seasonNumber = seasonNumber
         self.episodeNumber = episodeNumber
+        self.tmdbShowID = nil
+        self.episodeTitle = nil
         self.hasThumbnail = hasThumbnail
         self.playbackPosition = playbackPosition
         self.lastWatchedDate = lastWatchedDate

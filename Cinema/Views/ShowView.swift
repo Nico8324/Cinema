@@ -14,6 +14,11 @@ struct ShowView: View {
 
     @Query private var episodes: [Video]
 
+    @State private var isMatchingShow = false
+
+    /// The TMDB show page (overview, cast, score) for matched shows, fetched live.
+    @State private var showPage: TMDB.ShowPage?
+
     init(showName: String) {
         self.showName = showName
         self._episodes = Query(
@@ -44,7 +49,8 @@ struct ShowView: View {
                         }
                         .overlay(alignment: .bottomLeading) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(showName)
+                                // The official title once matched; the grouping key before.
+                                Text(episodes.first?.name ?? showName)
                                     .font(.title.bold())
                                 Text(episodes.count == 1
                                      ? String(localized: "1 episode")
@@ -55,6 +61,45 @@ struct ShowView: View {
                             .padding(Constants.outerPadding)
                         }
                         .accessibilityHidden(true)
+                }
+
+                // The show's facts, genres, and overview, once matched with TMDB.
+                if let showPage {
+                    VStack(alignment: .leading, spacing: Constants.verticalTextSpacing) {
+                        HStack(alignment: .top, spacing: Constants.outerPadding * 2) {
+                            if let year = showPage.firstAirYear {
+                                FactView(label: String(localized: "First Aired"), value: String(year))
+                            }
+                            if let seasonCount = showPage.numberOfSeasons {
+                                FactView(label: String(localized: "Seasons"), value: String(seasonCount))
+                            }
+                            if let rating = showPage.usRating, !rating.isEmpty {
+                                FactView(label: String(localized: "Rated"), value: rating)
+                            }
+                            if let score = showPage.formattedScore {
+                                FactView(label: String(localized: "Score"), value: score)
+                            }
+                        }
+
+                        if !showPage.genreNames.isEmpty {
+                            GenreNamesView(names: showPage.genreNames)
+                        }
+
+                        if let overview = showPage.overview, !overview.isEmpty {
+                            Text(overview)
+                                .font(.body)
+                        }
+
+                        if let trailerYouTubeID = episodes.first?.trailerYouTubeID {
+                            Text("Trailer")
+                                .font(.headline)
+                                .padding(.top, Constants.verticalTextSpacing)
+
+                            InlineTrailerView(youtubeID: trailerYouTubeID)
+                                .frame(maxWidth: Constants.trailerHeight)
+                        }
+                    }
+                    .padding(.horizontal, Constants.outerPadding)
                 }
 
                 ForEach(seasons, id: \.number) { season in
@@ -72,11 +117,37 @@ struct ShowView: View {
                     .padding(.horizontal, Constants.outerPadding)
                     .padding(.top, Constants.verticalTextSpacing)
                 }
+
+                if let people = showPage?.people, !people.isEmpty {
+                    CastRow(people: people)
+                        .padding(.top, Constants.verticalTextSpacing)
+                }
             }
             .padding(.bottom, Constants.outerPadding)
         }
         .navigationTitle("")
         .toolbarBackground(.hidden)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button("Match Show", systemImage: "sparkles.tv") {
+                        isMatchingShow = true
+                    }
+                } label: {
+                    Label("More", systemImage: "ellipsis.circle")
+                }
+            }
+        }
+        .sheet(isPresented: $isMatchingShow) {
+            TMDBShowSearchView(showName: showName, episodes: episodes)
+        }
+        .task(id: episodes.first?.tmdbShowID) {
+            guard let showID = episodes.first?.tmdbShowID else {
+                showPage = nil
+                return
+            }
+            showPage = try? await TMDB.showPage(forShowID: showID)
+        }
     }
 }
 
@@ -100,8 +171,16 @@ private struct EpisodeRow: View {
                 .clipShape(.rect(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("Episode \(episode.episodeNumber ?? 1)")
-                    .font(.headline)
+                // "3. The Engineer" once matched; plain numbering before.
+                if let title = episode.episodeTitle, !title.isEmpty {
+                    Text("\(episode.episodeNumber ?? 1). \(title)")
+                        .font(.headline)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                } else {
+                    Text("Episode \(episode.episodeNumber ?? 1)")
+                        .font(.headline)
+                }
                 if episode.duration > 0 {
                     Text(episode.formattedDuration)
                         .font(.caption)
