@@ -6,13 +6,17 @@ A Watch Now row of movies from a TMDB list, with a detail sheet and trailer.
 */
 
 import SwiftUI
+import SwiftData
 
 /// A horizontally scrolling row of movies from the TMDB list chosen in Settings
 /// (in theatres, coming soon, popular…), shown as portrait poster cards. Tapping
-/// one opens a detail sheet with the movie's backdrop, overview, and trailer.
+/// one opens a detail sheet — the library's own page when the movie is owned.
 struct DiscoveryRow: View {
     let title: String
     let movies: [TMDB.Movie]
+
+    @Query(filter: #Predicate<Video> { $0.tmdbID != nil })
+    private var matchedVideos: [Video]
 
     @State private var selectedMovie: TMDB.Movie?
 
@@ -41,8 +45,37 @@ struct DiscoveryRow: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
         }
         .sheet(item: $selectedMovie) { movie in
-            DiscoveryMovieSheet(movie: movie)
+            // A discovery movie the user already owns opens as their library
+            // page, ready to play — not as a read-only TMDB page.
+            if let owned = matchedVideos.first(where: { $0.tmdbID == movie.id }) {
+                OwnedVideoSheet(video: owned)
+            } else {
+                DiscoveryMovieSheet(movie: movie)
+            }
         }
+    }
+}
+
+/// The library's detail page presented as a sheet, with playback support.
+private struct OwnedVideoSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let video: Video
+
+    var body: some View {
+        NavigationStack {
+            DetailView(video: video)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") {
+                            dismiss()
+                        }
+                    }
+                }
+        }
+        // Steps aside when playback starts; the app's root presents the player.
+        .dismissesForFullWindowPlayback()
+        .preferredColorScheme(.dark)
     }
 }
 
@@ -89,11 +122,17 @@ private struct DiscoveryMovieSheet: View {
                         }
                     }
                 }
-                // Filmography taps (via a person's page) push more movie pages.
+                // Filmography taps (via a person's page) push more movie pages;
+                // owned movies push the library's own page.
                 .navigationDestination(for: TMDB.Movie.self) { pushed in
                     MoviePageView(movie: pushed)
                 }
+                .navigationDestination(for: Video.self) { video in
+                    DetailView(video: video)
+                }
         }
+        // Steps aside when playback starts; the app's root presents the player.
+        .dismissesForFullWindowPlayback()
         .preferredColorScheme(.dark)
     }
 }

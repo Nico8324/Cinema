@@ -28,7 +28,14 @@ struct PersonSheet: View {
                 .navigationDestination(for: TMDB.Movie.self) { movie in
                     MoviePageView(movie: movie)
                 }
+                // Owned movies open the library's own page…
+                .navigationDestination(for: Video.self) { video in
+                    DetailView(video: video)
+                }
         }
+        // …so this sheet steps aside when playback starts and the app's
+        // root presents the player.
+        .dismissesForFullWindowPlayback()
         .preferredColorScheme(.dark)
     }
 }
@@ -106,10 +113,19 @@ private struct PersonPageView: View {
 
                     LazyVStack(spacing: Constants.cardSpacing) {
                         ForEach(sortedFilmography) { credit in
-                            NavigationLink(value: credit.asMovie) {
-                                FilmographyRow(credit: credit, isInLibrary: libraryTMDBIDs.contains(credit.id))
+                            // Owned movies open the library's detail page, ready
+                            // to play; the rest open their TMDB page.
+                            if let ownedVideo = matchedVideos.first(where: { $0.tmdbID == credit.id }) {
+                                NavigationLink(value: ownedVideo) {
+                                    FilmographyRow(credit: credit, isInLibrary: true)
+                                }
+                                .buttonStyle(.plain)
+                            } else {
+                                NavigationLink(value: credit.asMovie) {
+                                    FilmographyRow(credit: credit, isInLibrary: false)
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
                         }
                     }
                 }

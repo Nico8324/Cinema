@@ -24,6 +24,13 @@ extension View {
         self.modifier(NavigationDestinationVideo(namespace: namespace))
     }
 
+    /// Dismisses this sheet when full-window playback starts, handing the
+    /// screen to the app's single player presenter at the root. Two competing
+    /// fullScreenCover hosts (root + sheet) race and can cancel each other out.
+    func dismissesForFullWindowPlayback() -> some View {
+        self.modifier(DismissForPlaybackModifier())
+    }
+
     func transitionSource(id: Video.ID, namespace: Namespace.ID) -> some View {
         self.modifier(TransitionSourceModifier(id: id, namespace: namespace))
     }
@@ -56,6 +63,20 @@ private struct FullScreenCoverModifier: ViewModifier {
     }
 }
 #endif
+
+private struct DismissForPlaybackModifier: ViewModifier {
+    @Environment(PlayerModel.self) private var player
+    @Environment(\.dismiss) private var dismiss
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: player.presentation) { _, newPresentation in
+                if newPresentation == .fullWindow {
+                    dismiss()
+                }
+            }
+    }
+}
 
 private struct NavigationDestinationVideo: ViewModifier {
     @Environment(\.modelContext) private var context
