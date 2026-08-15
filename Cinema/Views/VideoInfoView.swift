@@ -28,7 +28,7 @@ struct InfoView: View {
                 #endif
                 .foregroundStyle(.secondary)
 
-            Text(video.name)
+            Text(video.displayName)
                 .font(isCompact ? .body : .title3)
 
             Text(video.synopsis)

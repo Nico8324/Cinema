@@ -89,7 +89,7 @@ struct Cinema: App {
         // nothing real: tests create their own containers, and registering the
         // model classes twice with mismatched schemas traps inside SwiftData.
         if NSClassFromString("XCTestCase") != nil {
-            let schema = Schema(versionedSchema: CinemaSchemaV3.self)
+            let schema = Schema(versionedSchema: CinemaSchemaV4.self)
             let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
             guard let container = try? ModelContainer(for: schema, configurations: [config]) else {
                 fatalError("Couldn't create the test-host model container.")
@@ -129,7 +129,7 @@ struct Cinema: App {
     }
 
     private static func openModelContainer() throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CinemaSchemaV3.self)
+        let schema = Schema(versionedSchema: CinemaSchemaV4.self)
         return try ModelContainer(
             for: schema,
             migrationPlan: CinemaMigrationPlan.self,

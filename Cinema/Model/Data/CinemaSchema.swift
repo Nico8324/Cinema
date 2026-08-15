@@ -17,9 +17,9 @@ import CoreMedia
 /// this enum groups them under a version number so future schema changes migrate deliberately
 /// through `CinemaMigrationPlan` instead of relying on lightweight-migration luck.
 ///
-/// V3 adds `Video.tmdbID` and `Video.trailerYouTubeID` for TMDB matching and trailers.
-enum CinemaSchemaV3: VersionedSchema {
-    static let versionIdentifier = Schema.Version(3, 0, 0)
+/// V4 adds `Video.showName`, `seasonNumber`, and `episodeNumber` for TV episodes.
+enum CinemaSchemaV4: VersionedSchema {
+    static let versionIdentifier = Schema.Version(4, 0, 0)
 
     static var models: [any PersistentModel.Type] {
         [Video.self, Genre.self, UpNextItem.self]
@@ -30,11 +30,11 @@ enum CinemaSchemaV3: VersionedSchema {
 
 enum CinemaMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [CinemaSchemaV1.self, CinemaSchemaV2.self, CinemaSchemaV3.self]
+        [CinemaSchemaV1.self, CinemaSchemaV2.self, CinemaSchemaV3.self, CinemaSchemaV4.self]
     }
 
     static var stages: [MigrationStage] {
-        [migrateV1toV2, migrateV2toV3]
+        [migrateV1toV2, migrateV2toV3, migrateV3toV4]
     }
 
     /// V1 → V2:
@@ -79,6 +79,85 @@ enum CinemaMigrationPlan: SchemaMigrationPlan {
         fromVersion: CinemaSchemaV2.self,
         toVersion: CinemaSchemaV3.self
     )
+
+    /// V3 → V4: adds the optional episode columns — additive only.
+    static let migrateV3toV4 = MigrationStage.lightweight(
+        fromVersion: CinemaSchemaV3.self,
+        toVersion: CinemaSchemaV4.self
+    )
+}
+
+// MARK: - Legacy schema V3
+
+/// The V3 schema shape, kept only so existing stores can migrate.
+/// Never reference these models outside the migration plan.
+enum CinemaSchemaV3: VersionedSchema {
+    static let versionIdentifier = Schema.Version(3, 0, 0)
+
+    static var models: [any PersistentModel.Type] {
+        [Video.self, Genre.self, UpNextItem.self]
+    }
+
+    @Model
+    final class Video {
+        @Relationship(inverse: \Genre.videos)
+        var genres: [Genre]
+
+        @Relationship(deleteRule: .cascade, inverse: \UpNextItem.video)
+        var upNextItem: UpNextItem?
+
+        var uuid: UUID = UUID()
+        var localFilename: String?
+
+        @Attribute(originalName: "url")
+        var remoteURL: URL?
+
+        var name: String
+        var synopsis: String
+        var yearOfRelease: Int
+        var duration: Int
+        var contentRating: String
+        var dateAdded: Date = Date.distantPast
+        var tmdbID: Int?
+        var trailerYouTubeID: String?
+        var hasThumbnail: Bool = false
+        var playbackPosition: Double = 0
+        var lastWatchedDate: Date?
+
+        init(name: String) {
+            self.genres = []
+            self.name = name
+            self.synopsis = ""
+            self.yearOfRelease = 2023
+            self.duration = 0
+            self.contentRating = "NR"
+        }
+    }
+
+    @Model
+    final class Genre {
+        @Relationship
+        var videos: [Video]
+
+        var name: String
+
+        init(name: String) {
+            self.videos = []
+            self.name = name
+        }
+    }
+
+    @Model
+    final class UpNextItem {
+        @Relationship(deleteRule: .nullify)
+        var video: Video?
+
+        var createdAt: Date
+
+        init(createdAt: Date = .now) {
+            self.createdAt = createdAt
+        }
+    }
 }
 
 // MARK: - Legacy schema V2

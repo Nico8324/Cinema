@@ -38,12 +38,15 @@ struct DetailView: View {
                         .font(isCompact ? .title : .largeTitle)
                         .bold()
 
-                    Text("\(video.formattedYearOfRelease) | \(video.contentRating) | \(video.formattedDuration)",
-                         comment: "Release Year | Rating | Duration")
+                    Text(
+                        ([video.episodeLabel, video.formattedYearOfRelease, video.contentRating, video.formattedDuration]
+                            .compactMap { $0 })
+                            .joined(separator: " | ")
+                    )
                     .font(.headline)
                     .accessibilityLabel("""
-                                        Released \(video.formattedYearOfRelease), rated \(video.contentRating), \
-                                        \(video.accessibleDuration)
+                                        \(video.episodeLabel ?? "") Released \(video.formattedYearOfRelease), \
+                                        rated \(video.contentRating), \(video.accessibleDuration)
                                         """)
 
                     GenreView(genres: video.genres)
@@ -134,8 +137,12 @@ struct DetailView: View {
                     Button("Edit Video", systemImage: "pencil") {
                         isEditing = true
                     }
-                    Button("Match Metadata", systemImage: "sparkles.rectangle.stack") {
-                        isMatchingMetadata = true
+                    // Movie matching would attach the wrong metadata to a TV
+                    // episode — TMDB's TV endpoints are a separate milestone.
+                    if !video.isEpisode {
+                        Button("Match Metadata", systemImage: "sparkles.rectangle.stack") {
+                            isMatchingMetadata = true
+                        }
                     }
                     Button("Delete Video", systemImage: "trash", role: .destructive) {
                         isConfirmingDelete = true

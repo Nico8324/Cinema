@@ -59,7 +59,7 @@ struct VideoCardView: View {
     var body: some View {
         switch style {
         case .half:
-            PosterCard(video: video, title: video.name, progress: watchProgress)
+            PosterCard(video: video, title: video.displayName, progress: watchProgress)
                 .frame(width: isCompact ? Constants.compactVideoCardWidth : Constants.videoCardWidth)
                 .clipShape(.rect(cornerRadius: Constants.cornerRadius))
                 #if os(iOS) || os(visionOS)
@@ -67,7 +67,7 @@ struct VideoCardView: View {
                 #endif
 
         case .upNext:
-            PosterCard(video: video, title: video.name, progress: watchProgress)
+            PosterCard(video: video, title: video.displayName, progress: watchProgress)
                 .frame(width: Constants.upNextVideoCardWidth)
                 .clipShape(.rect(cornerRadius: Constants.cornerRadius))
                 #if os(iOS) || os(visionOS)
@@ -93,7 +93,7 @@ struct VideoCardView: View {
             .clipShape(.rect(cornerRadius: Constants.cornerRadius))
 
         case .grid:
-            PosterCard(video: video, title: video.name, progress: watchProgress)
+            PosterCard(video: video, title: video.displayName, progress: watchProgress)
                 #if os(iOS) || os(visionOS)
                 .hoverEffect()
                 #endif

@@ -36,9 +36,37 @@ struct LibraryView: View {
         return [GridItem](repeating: gridItem, count: count)
     }
 
-    /// The videos to display, filtered by the selected genre, alphabetically.
-    private var displayedVideos: [Video] {
-        selectedGenre?.videos.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending } ?? allVideos
+    /// One grid cell: a movie, or a whole show collapsed into a single card.
+    private enum LibraryItem: Identifiable {
+        case movie(Video)
+        case show(name: String, episodes: [Video])
+
+        var id: String {
+            switch self {
+            case .movie(let video): video.uuid.uuidString
+            case .show(let name, _): "show-\(name)"
+            }
+        }
+
+        var sortKey: String {
+            switch self {
+            case .movie(let video): video.name
+            case .show(let name, _): name
+            }
+        }
+    }
+
+    /// Movies and shows mixed alphabetically; a show's episodes group into one card.
+    private var libraryItems: [LibraryItem] {
+        let videos = selectedGenre?.videos ?? allVideos
+        let movies = videos.filter { !$0.isEpisode }.map(LibraryItem.movie)
+        let shows = Dictionary(grouping: videos.filter(\.isEpisode)) { $0.showName ?? "" }
+            .map { name, episodes in
+                LibraryItem.show(name: name, episodes: episodes.sorted {
+                    ($0.seasonNumber ?? 0, $0.episodeNumber ?? 0) < ($1.seasonNumber ?? 0, $1.episodeNumber ?? 0)
+                })
+            }
+        return (movies + shows).sorted { $0.sortKey.localizedStandardCompare($1.sortKey) == .orderedAscending }
     }
 
     var body: some View {
@@ -75,13 +103,23 @@ struct LibraryView: View {
                             .padding(.bottom)
 
                             LazyVGrid(columns: columns, spacing: Constants.cardSpacing) {
-                                ForEach(displayedVideos) { video in
-                                    NavigationLink(value: NavigationNode.video(video.id)) {
-                                        VideoCardView(video: video, style: .grid)
+                                ForEach(libraryItems) { item in
+                                    switch item {
+                                    case .movie(let video):
+                                        NavigationLink(value: NavigationNode.video(video.id)) {
+                                            VideoCardView(video: video, style: .grid)
+                                        }
+                                        .transitionSource(id: video.id, namespace: namespace)
+                                        .accessibilityLabel(video.name)
+                                        .buttonStyle(.plain)
+
+                                    case .show(let name, let episodes):
+                                        NavigationLink(value: NavigationNode.show(name)) {
+                                            ShowCardView(name: name, episodes: episodes)
+                                        }
+                                        .accessibilityLabel(name)
+                                        .buttonStyle(.plain)
                                     }
-                                    .transitionSource(id: video.id, namespace: namespace)
-                                    .accessibilityLabel(video.name)
-                                    .buttonStyle(.plain)
                                 }
                             }
                         }
@@ -184,6 +222,42 @@ struct LibraryView: View {
                 }
             }
         }
+    }
+}
+
+/// A grid card for a whole show: the first episode's art with an episode-count
+/// badge, in the same visual language as the movie cards.
+private struct ShowCardView: View {
+    let name: String
+    let episodes: [Video]
+
+    var body: some View {
+        VStack {
+            ZStack(alignment: .topTrailing) {
+                if let cover = episodes.first {
+                    PosterImageView(video: cover)
+                        .aspectRatio(16 / 9, contentMode: .fit)
+                        .cornerRadius(Constants.cornerRadius)
+                }
+
+                Text("\(episodes.count)")
+                    .font(.caption2.bold())
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(.thinMaterial, in: Capsule())
+                    .padding(6)
+                    .accessibilityLabel(episodes.count == 1
+                                        ? String(localized: "1 episode")
+                                        : String(localized: "\(episodes.count) episodes"))
+            }
+
+            Text(name)
+                .font(.body)
+                .lineLimit(1)
+        }
+        #if os(iOS) || os(visionOS)
+        .hoverEffect()
+        #endif
     }
 }
 

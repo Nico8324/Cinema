@@ -47,6 +47,36 @@ enum VideoImporter {
         let title: String
         /// The video's duration in whole seconds, or 0 if it couldn't be determined.
         let duration: Int
+        /// The episode marker parsed from the filename, for TV content.
+        let episode: EpisodeMarker?
+    }
+
+    /// A season/episode marker parsed from a filename like "Silo S02E04".
+    struct EpisodeMarker: Sendable, Equatable {
+        let showName: String
+        let season: Int
+        let episode: Int
+    }
+
+    /// Parses a "Show S01E02"-style title into its show and episode parts.
+    /// Handles separators like dots, underscores, and dashes; returns `nil`
+    /// for titles without a season/episode marker (movies).
+    ///
+    /// Character classes stand in for case-insensitivity, and a separator is
+    /// required before the marker — Swift Regex's `\b` follows Unicode default
+    /// word-boundary rules and misbehaves around dots and mixed case here.
+    nonisolated static func episodeMarker(in title: String) -> EpisodeMarker? {
+        let pattern = /^(?<show>.+?)[\s._-]+[Ss](?<season>\d{1,2})[\s._-]*[Ee](?<episode>\d{1,3})\b/
+        guard let match = title.firstMatch(of: pattern),
+              let season = Int(match.season),
+              let episode = Int(match.episode) else {
+            return nil
+        }
+        let show = match.show
+            .replacing(/[._]/, with: " ")
+            .trimmingCharacters(in: CharacterSet(charactersIn: " -"))
+        guard !show.isEmpty else { return nil }
+        return EpisodeMarker(showName: show, season: season, episode: episode)
     }
 
     /// The outcome of an import run: the files that made it in, per-file failure
@@ -93,10 +123,12 @@ enum VideoImporter {
                     }
                 }
                 let duration = await ThumbnailGenerator.duration(for: MediaStore.videoURL(forFilename: filename))
+                let title = sourceURL.deletingPathExtension().lastPathComponent
                 outcome.imported.append(ImportedFile(
                     filename: filename,
-                    title: sourceURL.deletingPathExtension().lastPathComponent,
-                    duration: duration
+                    title: title,
+                    duration: duration,
+                    episode: episodeMarker(in: title)
                 ))
             } catch {
                 logger.error("Import failed for \(sourceURL.lastPathComponent): \(error.localizedDescription)")
@@ -151,12 +183,16 @@ enum VideoImporter {
     static func addVideos(for files: [ImportedFile], to context: ModelContext) -> [Video] {
         let year = Calendar.current.component(.year, from: .now)
         let videos = files.map { file in
+            // Episodes take the show's name; the marker fields carry the rest.
             let video = Video(
-                name: file.title,
-                synopsis: file.title,
+                name: file.episode?.showName ?? file.title,
+                synopsis: file.episode?.showName ?? file.title,
                 localFilename: file.filename,
                 yearOfRelease: year,
-                duration: file.duration
+                duration: file.duration,
+                showName: file.episode?.showName,
+                seasonNumber: file.episode?.season,
+                episodeNumber: file.episode?.episode
             )
             context.insert(video)
             return video

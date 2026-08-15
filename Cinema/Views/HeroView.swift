@@ -44,7 +44,7 @@ struct HeroView: View {
             // Real-world titles and synopses can be long — cap the overlay's lines
             // so it never outgrows the poster behind it.
             VStack(alignment: .leading, spacing: Constants.verticalTextSpacing) {
-                Text(video.name)
+                Text(video.displayName)
                     .font(isCompact ? .title : .largeTitle)
                     .fontWeight(.bold)
                     .lineLimit(2)

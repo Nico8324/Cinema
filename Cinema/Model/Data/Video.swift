@@ -48,6 +48,12 @@ final class Video: Identifiable {
     var tmdbID: Int?
     /// The YouTube video ID of the movie's official trailer, from TMDB.
     var trailerYouTubeID: String?
+    /// For TV episodes: the show this episode belongs to. `nil` means a movie.
+    var showName: String?
+    /// For TV episodes: the season number parsed from the filename ("S01").
+    var seasonNumber: Int?
+    /// For TV episodes: the episode number parsed from the filename ("E02").
+    var episodeNumber: Int?
     /// Whether a poster thumbnail has been generated from the video file itself (see `ThumbnailGenerator`).
     /// Generation happens asynchronously after import, so this starts `false` and flips once the file lands on disk.
     var hasThumbnail: Bool = false
@@ -66,6 +72,9 @@ final class Video: Identifiable {
         duration: Int = 0,
         contentRating: String = "NR",
         dateAdded: Date = .now,
+        showName: String? = nil,
+        seasonNumber: Int? = nil,
+        episodeNumber: Int? = nil,
         hasThumbnail: Bool = false,
         playbackPosition: Double = 0,
         lastWatchedDate: Date? = nil
@@ -80,6 +89,9 @@ final class Video: Identifiable {
         self.duration = duration
         self.contentRating = contentRating
         self.dateAdded = dateAdded
+        self.showName = showName
+        self.seasonNumber = seasonNumber
+        self.episodeNumber = episodeNumber
         self.hasThumbnail = hasThumbnail
         self.playbackPosition = playbackPosition
         self.lastWatchedDate = lastWatchedDate
@@ -88,6 +100,25 @@ final class Video: Identifiable {
 
 extension Video {
     var id: UUID { uuid }
+
+    /// Whether this entry is a TV episode rather than a movie.
+    var isEpisode: Bool {
+        showName != nil
+    }
+
+    /// The episode marker like "S1, E2", in the TV-app style. `nil` for movies.
+    var episodeLabel: String? {
+        guard isEpisode, let seasonNumber, let episodeNumber else { return nil }
+        return String(localized: "S\(seasonNumber), E\(episodeNumber)")
+    }
+
+    /// The user-facing title: a movie's name, or "Show S1, E2" for episodes.
+    var displayName: String {
+        if let episodeLabel {
+            return "\(name) \(episodeLabel)"
+        }
+        return name
+    }
 
     /// The duration formatted for display, like "1h 32m" or "8m 24s".
     var formattedDuration: String {

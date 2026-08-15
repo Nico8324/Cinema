@@ -65,11 +65,11 @@ extension CinemaSuite {
         }
 
         // Reopen through the migration plan, exactly like the app does.
-        let v3Schema = Schema(versionedSchema: CinemaSchemaV3.self)
+        let currentSchema = Schema(versionedSchema: CinemaSchemaV4.self)
         let migrated = try ModelContainer(
-            for: v3Schema,
+            for: currentSchema,
             migrationPlan: CinemaMigrationPlan.self,
-            configurations: [ModelConfiguration(schema: v3Schema, url: storeURL)]
+            configurations: [ModelConfiguration(schema: currentSchema, url: storeURL)]
         )
         let context = migrated.mainContext
 
@@ -95,6 +95,9 @@ extension CinemaSuite {
         #expect(local.dateAdded != .distantPast)
         #expect(local.tmdbID == nil)
         #expect(local.trailerYouTubeID == nil)
+        #expect(local.showName == nil)
+        #expect(local.seasonNumber == nil)
+        #expect(local.episodeNumber == nil)
 
         // The orphaned queue entry was swept; the attached one survived.
         let queueItems = try context.fetch(FetchDescriptor<UpNextItem>())

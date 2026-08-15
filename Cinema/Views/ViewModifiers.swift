@@ -97,6 +97,12 @@ private struct NavigationDestinationVideo: ViewModifier {
                     } else {
                         ContentUnavailableView("This video isn’t available", systemImage: "list.and.film")
                     }
+
+                case .show(let showName):
+                    ShowView(showName: showName)
+                        #if os(iOS)
+                        .toolbarRole(.editor)
+                        #endif
                 }
             }
     }

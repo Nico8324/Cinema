@@ -13,4 +13,5 @@ import SwiftUI
 /// so paths stay serializable and deep-link ready.
 enum NavigationNode: Equatable, Hashable {
     case video(Video.ID)
+    case show(String)
 }

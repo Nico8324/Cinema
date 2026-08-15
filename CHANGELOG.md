@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- TV shows, first milestone: files named like "Silo S02E04" import as episodes. The Library groups a show's episodes into one card with an episode-count badge; a show page lists episodes by season with thumbnails, durations, and watch progress; episode titles read "Show S1, E2" across Watch Now and search; Continue Watching works per episode. Stored in schema V4 (lightweight migration). TMDB matching stays movie-only for now — TV metadata matching is the next milestone.
+
 ## [0.2.0] - 2026-08-15
 
 The discovery update: a TMDB-powered browsing layer woven into the library, plus a hardened import pipeline with tests and CI.
