@@ -17,6 +17,7 @@ struct SettingsView: View {
 
     @AppStorage(ProfileStore.nameKey) private var profileName: String = ""
     @AppStorage(TMDB.MovieList.storageKey) private var discoveryList: TMDB.MovieList = .nowPlaying
+    @AppStorage(TMDB.ShowList.storageKey) private var tvDiscoveryList: TMDB.ShowList = .popular
 
     @State private var isConfirmingClear = false
 
@@ -58,15 +59,20 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Picker("Discover Row", selection: $discoveryList) {
+                    Picker("Movies Row", selection: $discoveryList) {
                         ForEach(TMDB.MovieList.allCases) { list in
+                            Text(list.displayName).tag(list)
+                        }
+                    }
+                    Picker("Shows Row", selection: $tvDiscoveryList) {
+                        ForEach(TMDB.ShowList.allCases) { list in
                             Text(list.displayName).tag(list)
                         }
                     }
                 } header: {
                     Text("Watch Now")
                 } footer: {
-                    Text("Which movies from The Movie Database appear at the bottom of Watch Now.")
+                    Text("Which movies and TV shows from The Movie Database appear at the bottom of Watch Now.")
                 }
 
                 Section("About") {

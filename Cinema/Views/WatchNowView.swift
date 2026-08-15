@@ -27,12 +27,14 @@ struct WatchNowView: View {
         recentlyPlayedVideos.filter(\.isPartiallyWatched)
     }
 
-    /// Which TMDB list feeds the discovery row — the user picks it in Settings.
+    /// Which TMDB lists feed the discovery rows — the user picks them in Settings.
     @AppStorage(TMDB.MovieList.storageKey) private var discoveryList: TMDB.MovieList = .nowPlaying
+    @AppStorage(TMDB.ShowList.storageKey) private var tvDiscoveryList: TMDB.ShowList = .popular
 
-    /// Discovery content below the personal rows, from the chosen TMDB list.
+    /// Discovery content below the personal rows, from the chosen TMDB lists.
     /// An empty array (offline, API trouble) just hides the row.
     @State private var discoveryMovies: [TMDB.Movie] = []
+    @State private var discoveryShows: [TMDB.Show] = []
 
     #if os(visionOS)
     @State private var isShowingSettings = false
@@ -78,6 +80,10 @@ struct WatchNowView: View {
                                 if !discoveryMovies.isEmpty {
                                     DiscoveryRow(title: discoveryList.displayName, movies: discoveryMovies)
                                 }
+
+                                if !discoveryShows.isEmpty {
+                                    TVDiscoveryRow(title: tvDiscoveryList.displayName, shows: discoveryShows)
+                                }
                             }
                             .padding(.bottom, Constants.outerPadding)
                         }
@@ -86,9 +92,12 @@ struct WatchNowView: View {
                 }
             }
             .navigationDestinationVideo(in: namespace)
-            // Refetches when the Settings choice changes.
+            // Refetches when the Settings choices change.
             .task(id: discoveryList) {
                 discoveryMovies = (try? await TMDB.movies(from: discoveryList)) ?? []
+            }
+            .task(id: tvDiscoveryList) {
+                discoveryShows = (try? await TMDB.shows(from: tvDiscoveryList)) ?? []
             }
             .toolbarBackground(.hidden)
             .overlay(alignment: .topLeading) {

@@ -26,6 +26,65 @@ extension TMDB {
         var thumbnailURL: URL? {
             posterPath.map { URL(string: "https://image.tmdb.org/t/p/w154\($0)")! }
         }
+
+        /// A mid-size portrait poster for browsing cards.
+        var posterCardURL: URL? {
+            posterPath.map { URL(string: "https://image.tmdb.org/t/p/w342\($0)")! }
+        }
+
+        /// The landscape backdrop, sized for the app's 16:9 poster cards.
+        var backdropURL: URL? {
+            backdropPath.map { URL(string: "https://image.tmdb.org/t/p/w780\($0)")! }
+        }
+    }
+
+    /// The TMDB TV lists the Watch Now shows row can display, chosen in Settings.
+    enum ShowList: String, CaseIterable, Identifiable, Sendable {
+        case airingToday
+        case onTheAir
+        case popular
+        case topRated
+        case trending
+
+        /// The Settings key holding the user's choice.
+        static let storageKey = "watchNowTVDiscoveryList"
+
+        var id: String { rawValue }
+
+        /// The user-facing name — the Settings option and the Watch Now row title.
+        /// Show-flavored so the row reads apart from the movies row above it.
+        var displayName: String {
+            switch self {
+            case .airingToday: String(localized: "Airing Today")
+            case .onTheAir: String(localized: "On the Air")
+            case .popular: String(localized: "Popular Shows")
+            case .topRated: String(localized: "Top Rated Shows")
+            case .trending: String(localized: "Trending Shows")
+            }
+        }
+
+        fileprivate var path: String {
+            switch self {
+            case .airingToday: "/tv/airing_today"
+            case .onTheAir: "/tv/on_the_air"
+            case .popular: "/tv/popular"
+            case .topRated: "/tv/top_rated"
+            case .trending: "/trending/tv/week"
+            }
+        }
+    }
+
+    /// The shows in one of TMDB's curated TV lists, localized for the user.
+    static func shows(from list: ShowList) async throws -> [Show] {
+        let url = endpoint(list.path, query: [
+            URLQueryItem(name: "language", value: Locale.preferredLanguages.first ?? "en-US")
+        ])
+        let (data, _) = try await URLSession.shared.data(from: url)
+        struct ListResponse: Codable {
+            let results: [Show]
+        }
+        // Cards are pure poster art — entries without a poster have nothing to show.
+        return try decoder.decode(ListResponse.self, from: data).results.filter { $0.posterPath != nil }
     }
 
     /// A show's page: extended details plus aggregate credits, ratings, and
