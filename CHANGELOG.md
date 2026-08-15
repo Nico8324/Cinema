@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Importing large movies no longer gets the app killed by the platform memory limit: the chunked copy accumulated every chunk in an undrained autorelease pool, so a multi-gigabyte import ballooned memory until visionOS terminated the app (found on Vision Pro, `EXC_RESOURCE` at the 5GB limit; verified fixed on hardware with a 20GB import). The copy loop now drains a pool per chunk.
 
 ### Added
+- "In Theatres" on Watch Now: a row of movies currently playing in your region's cinemas (TMDB, locale-aware). Tapping a poster opens a detail sheet with the backdrop, overview, and the official trailer playing inline — pre-buffered like the library's trailers.
 - Duplicate detection on import: files whose content is already in the library (same size and leading hash) are skipped with an "Already in your library" notice instead of silently doubling disk usage.
 - Startup reconciliation: orphaned media files (copied but never registered, e.g. after a crash mid-import) and library entries whose backing file vanished are swept once per launch.
 - A unit test suite (schema migration V1→V3 against a real store file, import pipeline including duplicates, reconciliation, YouTube URL parsing, TMDB matching, model heuristics) and a GitHub Actions CI workflow building iOS + visionOS and running the tests on every push.

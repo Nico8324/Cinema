@@ -32,6 +32,11 @@ enum TMDB {
             posterPath.map { URL(string: "https://image.tmdb.org/t/p/w154\($0)")! }
         }
 
+        /// A mid-size portrait poster for browsing cards.
+        var posterCardURL: URL? {
+            posterPath.map { URL(string: "https://image.tmdb.org/t/p/w342\($0)")! }
+        }
+
         /// The landscape backdrop, sized for the app's 16:9 poster cards.
         var backdropURL: URL? {
             backdropPath.map { URL(string: "https://image.tmdb.org/t/p/w780\($0)")! }
@@ -91,6 +96,17 @@ enum TMDB {
         return components.url!
     }
 
+    /// Movies currently playing in theatres for the user's region.
+    static func nowPlayingMovies() async throws -> [Movie] {
+        let url = endpoint("/movie/now_playing", query: [
+            URLQueryItem(name: "language", value: Locale.preferredLanguages.first ?? "en-US"),
+            URLQueryItem(name: "region", value: Locale.current.region?.identifier ?? "US")
+        ])
+        let (data, _) = try await URLSession.shared.data(from: url)
+        // Cards are pure poster art — entries without a poster have nothing to show.
+        return try decoder.decode(SearchResponse.self, from: data).results.filter { $0.posterPath != nil }
+    }
+
     /// Searches TMDB for movies matching the query.
     static func searchMovies(matching query: String) async throws -> [Movie] {
         let url = endpoint("/search/movie", query: [
@@ -108,7 +124,7 @@ enum TMDB {
         async let details = fetchDetails(movieID: movie.id)
         async let certification = fetchCertification(movieID: movie.id)
         async let backdropData = fetchBackdrop(for: movie)
-        async let trailerID = fetchTrailerYouTubeID(movieID: movie.id)
+        async let trailerID = trailerYouTubeID(forMovieID: movie.id)
         return Match(
             movie: movie,
             genreNames: (try await details).genres.map(\.name),
@@ -120,7 +136,7 @@ enum TMDB {
 
     /// The YouTube ID of the movie's best trailer: official trailers first,
     /// then any trailer, then a teaser.
-    private static func fetchTrailerYouTubeID(movieID: Int) async throws -> String? {
+    static func trailerYouTubeID(forMovieID movieID: Int) async throws -> String? {
         // Trailers are most reliably listed under en-US.
         let url = endpoint("/movie/\(movieID)/videos", query: [
             URLQueryItem(name: "language", value: "en-US")

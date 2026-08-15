@@ -27,6 +27,10 @@ struct WatchNowView: View {
         recentlyPlayedVideos.filter(\.isPartiallyWatched)
     }
 
+    /// Movies currently in theatres (from TMDB) — discovery content below the
+    /// personal rows. An empty array (offline, API trouble) just hides the row.
+    @State private var inTheatresMovies: [TMDB.Movie] = []
+
     #if os(visionOS)
     @State private var isShowingSettings = false
     #endif
@@ -67,6 +71,10 @@ struct WatchNowView: View {
                                 VideoListView(title: "Recently Added",
                                               videos: recentlyAddedVideos,
                                               cardStyle: .full, namespace: namespace)
+
+                                if !inTheatresMovies.isEmpty {
+                                    InTheatresRow(movies: inTheatresMovies)
+                                }
                             }
                             .padding(.bottom, Constants.outerPadding)
                         }
@@ -75,6 +83,9 @@ struct WatchNowView: View {
                 }
             }
             .navigationDestinationVideo(in: namespace)
+            .task {
+                inTheatresMovies = (try? await TMDB.nowPlayingMovies()) ?? []
+            }
             .toolbarBackground(.hidden)
             .overlay(alignment: .topLeading) {
                 #if os(visionOS)
