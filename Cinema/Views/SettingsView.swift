@@ -20,6 +20,13 @@ struct SettingsView: View {
     @AppStorage(TMDB.ShowList.storageKey) private var tvDiscoveryList: TMDB.ShowList = .popular
 
     @State private var isConfirmingClear = false
+    @State private var refreshProgress: (completed: Int, total: Int)?
+    @State private var refreshSummary: String?
+
+    /// Only matched titles have metadata to refresh.
+    private var hasMatchedTitles: Bool {
+        videos.contains { $0.tmdbID != nil || $0.tmdbShowID != nil }
+    }
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
@@ -50,12 +57,34 @@ struct SettingsView: View {
                     }
                 }
 
-                Section("Library") {
+                Section {
                     LabeledContent("Videos", value: "\(videos.count)")
+                    if let progress = refreshProgress {
+                        HStack {
+                            Text("Refreshing Metadata…")
+                            Spacer()
+                            if progress.total > 0 {
+                                Text("\(progress.completed)/\(progress.total)")
+                                    .foregroundStyle(.secondary)
+                                    .monospacedDigit()
+                            }
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                    } else {
+                        Button("Refresh Metadata") {
+                            refreshMetadata()
+                        }
+                        .disabled(!hasMatchedTitles)
+                    }
                     Button("Clear Library", role: .destructive) {
                         isConfirmingClear = true
                     }
                     .disabled(videos.isEmpty)
+                } header: {
+                    Text("Library")
+                } footer: {
+                    Text("Refresh Metadata re-downloads titles, artwork, and details from The Movie Database for every matched video and show.")
                 }
 
                 Section {
@@ -94,6 +123,18 @@ struct SettingsView: View {
                     }
                 }
             }
+            .alert(
+                "Metadata Refreshed",
+                isPresented: .init(
+                    get: { refreshSummary != nil },
+                    set: { isPresented in if !isPresented { refreshSummary = nil } }
+                ),
+                presenting: refreshSummary
+            ) { _ in
+                Button("OK") { }
+            } message: { summary in
+                Text(summary)
+            }
             .confirmationDialog(
                 "Clear your entire library?",
                 isPresented: $isConfirmingClear,
@@ -105,6 +146,27 @@ struct SettingsView: View {
             } message: {
                 Text("This removes every video you’ve added. This can’t be undone.")
             }
+        }
+    }
+
+    /// Re-downloads TMDB metadata for every matched title, with live progress.
+    private func refreshMetadata() {
+        refreshProgress = (0, 0)
+        Task {
+            let outcome = await TMDB.refreshLibraryMetadata(in: context) { completed, total in
+                refreshProgress = (completed, total)
+            }
+            refreshProgress = nil
+
+            var parts = [outcome.updated == 1
+                         ? String(localized: "Updated 1 title.")
+                         : String(localized: "Updated \(outcome.updated) titles.")]
+            if outcome.failed > 0 {
+                parts.append(outcome.failed == 1
+                             ? String(localized: "1 title couldn’t be refreshed.")
+                             : String(localized: "\(outcome.failed) titles couldn’t be refreshed."))
+            }
+            refreshSummary = parts.joined(separator: " ")
         }
     }
 

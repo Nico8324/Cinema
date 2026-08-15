@@ -269,6 +269,15 @@ extension TMDB {
         return try decoder.decode(SearchResponse.self, from: data).results
     }
 
+    /// One show fetched by ID — for refreshing an already-matched entry.
+    static func show(forID showID: Int) async throws -> Show {
+        let url = endpoint("/tv/\(showID)", query: [
+            URLQueryItem(name: "language", value: Locale.preferredLanguages.first ?? "en-US")
+        ])
+        let (data, _) = try await URLSession.shared.data(from: url)
+        return try decoder.decode(Show.self, from: data)
+    }
+
     /// The extended page for one show: details, credits, ratings, and videos in one call.
     static func showPage(forShowID showID: Int) async throws -> ShowPage {
         let url = endpoint("/tv/\(showID)", query: [

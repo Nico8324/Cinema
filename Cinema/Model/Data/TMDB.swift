@@ -316,6 +316,15 @@ enum TMDB {
         return try decoder.decode(SearchResponse.self, from: data).results
     }
 
+    /// One movie fetched by ID — for refreshing an already-matched entry.
+    static func movie(forID movieID: Int) async throws -> Movie {
+        let url = endpoint("/movie/\(movieID)", query: [
+            URLQueryItem(name: "language", value: Locale.preferredLanguages.first ?? "en-US")
+        ])
+        let (data, _) = try await URLSession.shared.data(from: url)
+        return try decoder.decode(Movie.self, from: data)
+    }
+
     /// Gathers everything needed to apply a movie to a library entry:
     /// genre names, the US certification, and the backdrop image bytes.
     static func loadMatch(for movie: Movie) async throws -> Match {
