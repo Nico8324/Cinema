@@ -27,6 +27,9 @@ struct DetailView: View {
     @State private var isEditing = false
     @State private var isMatchingMetadata = false
 
+    /// The TMDB movie page (cast, runtime, score) for matched videos, fetched live.
+    @State private var moviePage: TMDB.MoviePage?
+
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack {
@@ -96,6 +99,14 @@ struct DetailView: View {
                     .padding(.bottom, isCompact ? Constants.detailCompactPadding : 0)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
+
+                // Cast, crew, and movie facts from TMDB, for matched videos.
+                if let moviePage {
+                    if !moviePage.people.isEmpty {
+                        CastRow(people: moviePage.people, isCompact: isCompact)
+                    }
+                    InformationSection(video: video, page: moviePage, isCompact: isCompact)
+                }
             }
             #if os(iOS)
             .background(.black)
@@ -149,6 +160,13 @@ struct DetailView: View {
         .sheet(isPresented: $isMatchingMetadata) {
             TMDBSearchView(video: video)
         }
+        .task(id: video.tmdbID) {
+            guard let tmdbID = video.tmdbID else {
+                moviePage = nil
+                return
+            }
+            moviePage = try? await TMDB.moviePage(forMovieID: tmdbID)
+        }
     }
 
     /// Dismisses first, then deletes the video (including the locally imported file and
@@ -180,6 +198,111 @@ struct DetailView: View {
             #endif
         }
         .padding([.horizontal, .bottom], -Constants.extendSafeAreaTV)
+    }
+}
+
+/// A horizontally scrolling row of cast and crew — circular photos with
+/// name and role, in the TV-app style.
+private struct CastRow: View {
+    let people: [TMDB.CreditedPerson]
+    let isCompact: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Constants.verticalTextSpacing) {
+            Text("Cast & Crew")
+                .font(.headline)
+                .padding(.horizontal, isCompact ? Constants.detailCompactPadding : Constants.detailPadding)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: Constants.cardSpacing) {
+                    ForEach(people) { person in
+                        PersonCard(person: person)
+                    }
+                }
+                .padding(.horizontal, isCompact ? Constants.detailCompactPadding : Constants.detailPadding)
+            }
+            .scrollClipDisabled()
+        }
+        .padding(.bottom, isCompact ? Constants.detailCompactPadding : 0)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct PersonCard: View {
+    let person: TMDB.CreditedPerson
+
+    var body: some View {
+        VStack(spacing: 6) {
+            AsyncImage(url: person.profileURL) { image in
+                image
+                    .resizable()
+                    .scaledToFill()
+            } placeholder: {
+                ZStack {
+                    Color(white: 0.15)
+                    Image(systemName: "person.fill")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 76, height: 76)
+            .clipShape(Circle())
+
+            Text(person.name)
+                .font(.caption.bold())
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+
+            Text(person.role)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+        }
+        .frame(width: 90)
+    }
+}
+
+/// Movie facts — released, runtime, rating, score — in the TV-app's
+/// label-over-value style.
+private struct InformationSection: View {
+    let video: Video
+    let page: TMDB.MoviePage
+    let isCompact: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Constants.verticalTextSpacing) {
+            Text("Information")
+                .font(.headline)
+
+            HStack(alignment: .top, spacing: Constants.outerPadding * 2) {
+                fact(String(localized: "Released"), video.formattedYearOfRelease)
+
+                if let runtime = page.runtime, runtime > 0 {
+                    fact(String(localized: "Runtime"),
+                         Duration.seconds(runtime * 60).formatted(.units(allowed: [.hours, .minutes], width: .narrow)))
+                }
+
+                fact(String(localized: "Rated"), video.contentRating)
+
+                if let score = page.voteAverage, score > 0 {
+                    fact(String(localized: "Score"), String(format: "★ %.1f", score))
+                }
+            }
+        }
+        .padding(isCompact ? Constants.detailCompactPadding : Constants.detailPadding)
+        .padding(.bottom, isCompact ? Constants.detailCompactPadding : Constants.detailPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func fact(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.subheadline.weight(.semibold))
+        }
     }
 }
 

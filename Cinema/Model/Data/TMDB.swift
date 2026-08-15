@@ -65,6 +65,80 @@ enum TMDB {
         let results: [CountryReleases]
     }
 
+    /// One credited person, cast or crew, ready for display.
+    struct CreditedPerson: Identifiable, Sendable {
+        /// TMDB's credit ID — unique per credit, unlike the person ID.
+        let id: String
+        let name: String
+        /// The character played, or the crew job.
+        let role: String
+        let profileURL: URL?
+    }
+
+    /// The full movie page for a matched video: extended details plus credits,
+    /// fetched as one request via `append_to_response`.
+    struct MoviePage: Codable, Sendable {
+        struct Credits: Codable, Sendable {
+            struct Cast: Codable, Sendable {
+                let creditId: String
+                let name: String
+                let character: String?
+                let profilePath: String?
+            }
+            struct Crew: Codable, Sendable {
+                let creditId: String
+                let name: String
+                let job: String?
+                let profilePath: String?
+            }
+            let cast: [Cast]
+            let crew: [Crew]
+        }
+
+        let runtime: Int?
+        let voteAverage: Double?
+        let credits: Credits?
+
+        /// Cast first (capped), then the key creative crew — the TV-app ordering.
+        var people: [CreditedPerson] {
+            guard let credits else { return [] }
+            let cast = credits.cast.prefix(15).map { member in
+                CreditedPerson(
+                    id: member.creditId,
+                    name: member.name,
+                    role: member.character ?? "",
+                    profileURL: profileURL(for: member.profilePath)
+                )
+            }
+            let keyJobs = ["Director", "Screenplay", "Writer"]
+            let crew = credits.crew
+                .filter { keyJobs.contains($0.job ?? "") }
+                .map { member in
+                    CreditedPerson(
+                        id: member.creditId,
+                        name: member.name,
+                        role: member.job ?? "",
+                        profileURL: profileURL(for: member.profilePath)
+                    )
+                }
+            return Array(cast) + crew
+        }
+
+        private func profileURL(for path: String?) -> URL? {
+            path.map { URL(string: "https://image.tmdb.org/t/p/w185\($0)")! }
+        }
+    }
+
+    /// The extended page for one movie: runtime, score, and credits in one call.
+    static func moviePage(forMovieID movieID: Int) async throws -> MoviePage {
+        let url = endpoint("/movie/\(movieID)", query: [
+            URLQueryItem(name: "language", value: Locale.preferredLanguages.first ?? "en-US"),
+            URLQueryItem(name: "append_to_response", value: "credits")
+        ])
+        let (data, _) = try await URLSession.shared.data(from: url)
+        return try decoder.decode(MoviePage.self, from: data)
+    }
+
     private struct VideosResponse: Codable {
         struct Clip: Codable {
             let key: String
