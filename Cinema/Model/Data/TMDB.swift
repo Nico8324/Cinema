@@ -14,7 +14,7 @@ import SwiftData
 /// (title, synopsis, year, certification, genres) and landscape backdrop art.
 enum TMDB {
     /// A movie as returned by the search endpoint.
-    struct Movie: Codable, Identifiable, Sendable {
+    struct Movie: Codable, Identifiable, Sendable, Hashable {
         let id: Int
         let title: String
         let overview: String
@@ -66,13 +66,80 @@ enum TMDB {
     }
 
     /// One credited person, cast or crew, ready for display.
-    struct CreditedPerson: Identifiable, Sendable {
+    struct CreditedPerson: Identifiable, Sendable, Hashable {
         /// TMDB's credit ID — unique per credit, unlike the person ID.
         let id: String
+        /// TMDB's person ID, for loading the person's page and filmography.
+        let personID: Int
         let name: String
         /// The character played, or the crew job.
         let role: String
         let profileURL: URL?
+    }
+
+    /// A person's page: portrait and biography.
+    struct PersonDetails: Codable, Sendable {
+        let name: String
+        let biography: String?
+        let profilePath: String?
+
+        var portraitURL: URL? {
+            profilePath.map { URL(string: "https://image.tmdb.org/t/p/w342\($0)")! }
+        }
+    }
+
+    /// One movie in a person's filmography.
+    struct FilmCredit: Codable, Identifiable, Sendable {
+        let id: Int
+        let title: String
+        let character: String?
+        let releaseDate: String?
+        let posterPath: String?
+        let backdropPath: String?
+        let overview: String?
+
+        var year: Int? {
+            releaseDate.flatMap { Int($0.prefix(4)) }
+        }
+
+        var thumbnailURL: URL? {
+            posterPath.map { URL(string: "https://image.tmdb.org/t/p/w154\($0)")! }
+        }
+
+        /// The credit as a displayable movie, for the shared movie page.
+        var asMovie: Movie {
+            Movie(
+                id: id,
+                title: title,
+                overview: overview ?? "",
+                releaseDate: releaseDate,
+                posterPath: posterPath,
+                backdropPath: backdropPath
+            )
+        }
+    }
+
+    /// The person's page details, localized for the user.
+    static func person(forID personID: Int) async throws -> PersonDetails {
+        let url = endpoint("/person/\(personID)", query: [
+            URLQueryItem(name: "language", value: Locale.preferredLanguages.first ?? "en-US")
+        ])
+        let (data, _) = try await URLSession.shared.data(from: url)
+        return try decoder.decode(PersonDetails.self, from: data)
+    }
+
+    /// The person's acting filmography, deduplicated by movie.
+    static func filmography(forPersonID personID: Int) async throws -> [FilmCredit] {
+        struct CreditsResponse: Codable {
+            let cast: [FilmCredit]
+        }
+        let url = endpoint("/person/\(personID)/movie_credits", query: [
+            URLQueryItem(name: "language", value: Locale.preferredLanguages.first ?? "en-US")
+        ])
+        let (data, _) = try await URLSession.shared.data(from: url)
+        let credits = try decoder.decode(CreditsResponse.self, from: data).cast
+        var seen = Set<Int>()
+        return credits.filter { seen.insert($0.id).inserted }
     }
 
     /// The full movie page for a matched video: extended details plus credits,
@@ -80,12 +147,14 @@ enum TMDB {
     struct MoviePage: Codable, Sendable {
         struct Credits: Codable, Sendable {
             struct Cast: Codable, Sendable {
+                let id: Int
                 let creditId: String
                 let name: String
                 let character: String?
                 let profilePath: String?
             }
             struct Crew: Codable, Sendable {
+                let id: Int
                 let creditId: String
                 let name: String
                 let job: String?
@@ -115,6 +184,7 @@ enum TMDB {
             let cast = credits.cast.prefix(15).map { member in
                 CreditedPerson(
                     id: member.creditId,
+                    personID: member.id,
                     name: member.name,
                     role: member.character ?? "",
                     profileURL: profileURL(for: member.profilePath)
@@ -126,6 +196,7 @@ enum TMDB {
                 .map { member in
                     CreditedPerson(
                         id: member.creditId,
+                        personID: member.id,
                         name: member.name,
                         role: member.job ?? "",
                         profileURL: profileURL(for: member.profilePath)

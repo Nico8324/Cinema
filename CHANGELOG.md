@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Importing large movies no longer gets the app killed by the platform memory limit: the chunked copy accumulated every chunk in an undrained autorelease pool, so a multi-gigabyte import ballooned memory until visionOS terminated the app (found on Vision Pro, `EXC_RESOURCE` at the 5GB limit; verified fixed on hardware with a 20GB import). The copy loop now drains a pool per chunk.
 
 ### Added
+- Cast members are tappable everywhere they appear: a person's page shows their portrait, biography, and full filmography — with movies already in your library sorted first and badged, and every filmography entry opening the full movie page (trailer and cast included).
 - Cast & Crew and Information in the TV-app style — on the detail page for TMDB-matched videos and on the discovery sheet: a scrolling row of cast and key crew with photos and roles, plus released year, runtime, rating, and TMDB score. Fetched live per visit — nothing new stored.
 - A discovery row on Watch Now, fed by your choice of TMDB list in Settings: In Theatres (default), Coming Soon, Popular, Top Rated, or Trending This Week — locale- and region-aware. Tapping a poster opens a detail sheet with the backdrop, overview, and the official trailer playing inline — pre-buffered like the library's trailers.
 - Duplicate detection on import: files whose content is already in the library (same size and leading hash) are skipped with an "Already in your library" notice instead of silently doubling disk usage.

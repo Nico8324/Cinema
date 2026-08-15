@@ -14,6 +14,10 @@ struct CastRow: View {
     let people: [TMDB.CreditedPerson]
     var horizontalPadding: Double = Constants.outerPadding
 
+    /// The row presents the person's page itself, so every surface embedding
+    /// it gets tappable cast for free.
+    @State private var selectedPerson: TMDB.CreditedPerson?
+
     var body: some View {
         VStack(alignment: .leading, spacing: Constants.verticalTextSpacing) {
             Text("Cast & Crew")
@@ -23,7 +27,13 @@ struct CastRow: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: Constants.cardSpacing) {
                     ForEach(people) { person in
-                        PersonCard(person: person)
+                        Button {
+                            selectedPerson = person
+                        } label: {
+                            PersonCard(person: person)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(person.name)
                     }
                 }
                 .padding(.horizontal, horizontalPadding)
@@ -31,6 +41,9 @@ struct CastRow: View {
             .scrollClipDisabled()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .sheet(item: $selectedPerson) { person in
+            PersonSheet(person: person)
+        }
     }
 }
 

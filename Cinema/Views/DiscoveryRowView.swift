@@ -79,83 +79,98 @@ private struct DiscoveryMovieSheet: View {
 
     let movie: TMDB.Movie
 
+    var body: some View {
+        NavigationStack {
+            MoviePageView(movie: movie)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") {
+                            dismiss()
+                        }
+                    }
+                }
+                // Filmography taps (via a person's page) push more movie pages.
+                .navigationDestination(for: TMDB.Movie.self) { pushed in
+                    MoviePageView(movie: pushed)
+                }
+        }
+        .preferredColorScheme(.dark)
+    }
+}
+
+/// A TMDB movie's full page: backdrop, facts, genres, overview, trailer, and
+/// cast. Works as a sheet's root or pushed from a person's filmography.
+struct MoviePageView: View {
+    let movie: TMDB.Movie
+
     @State private var trailerYouTubeID: String?
     @State private var moviePage: TMDB.MoviePage?
 
     var body: some View {
-        NavigationStack {
-            ScrollView(showsIndicators: false) {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: Constants.verticalTextSpacing) {
+                AsyncImage(url: movie.backdropURL) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    Color(white: 0.12)
+                }
+                .aspectRatio(16 / 9, contentMode: .fit)
+                .clipped()
+
                 VStack(alignment: .leading, spacing: Constants.verticalTextSpacing) {
-                    AsyncImage(url: movie.backdropURL) { image in
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    } placeholder: {
-                        Color(white: 0.12)
-                    }
-                    .aspectRatio(16 / 9, contentMode: .fit)
-                    .clipped()
+                    Text(movie.title)
+                        .font(.title2.bold())
 
-                    VStack(alignment: .leading, spacing: Constants.verticalTextSpacing) {
-                        Text(movie.title)
-                            .font(.title2.bold())
-
-                        // The movie's key facts, filled in as the page loads.
-                        HStack(alignment: .top, spacing: Constants.outerPadding * 2) {
-                            if let year = movie.year {
-                                FactView(label: String(localized: "Released"), value: String(year))
-                            }
-                            if let runtime = moviePage?.formattedRuntime {
-                                FactView(label: String(localized: "Runtime"), value: runtime)
-                            }
-                            if let score = moviePage?.formattedScore {
-                                FactView(label: String(localized: "Score"), value: score)
-                            }
+                    // The movie's key facts, filled in as the page loads.
+                    HStack(alignment: .top, spacing: Constants.outerPadding * 2) {
+                        if let year = movie.year {
+                            FactView(label: String(localized: "Released"), value: String(year))
                         }
-
-                        if let genreNames = moviePage?.genreNames, !genreNames.isEmpty {
-                            GenreNamesView(names: genreNames)
+                        if let runtime = moviePage?.formattedRuntime {
+                            FactView(label: String(localized: "Runtime"), value: runtime)
                         }
-
-                        if !movie.overview.isEmpty {
-                            Text(movie.overview)
-                                .font(.body)
-                        }
-
-                        if let trailerYouTubeID {
-                            Text("Trailer")
-                                .font(.headline)
-                                .padding(.top, Constants.verticalTextSpacing)
-
-                            InlineTrailerView(youtubeID: trailerYouTubeID)
-                                .frame(maxWidth: Constants.trailerHeight)
+                        if let score = moviePage?.formattedScore {
+                            FactView(label: String(localized: "Score"), value: score)
                         }
                     }
-                    .padding(.horizontal, Constants.outerPadding)
 
-                    if let people = moviePage?.people, !people.isEmpty {
-                        CastRow(people: people)
+                    if let genreNames = moviePage?.genreNames, !genreNames.isEmpty {
+                        GenreNamesView(names: genreNames)
+                    }
+
+                    if !movie.overview.isEmpty {
+                        Text(movie.overview)
+                            .font(.body)
+                    }
+
+                    if let trailerYouTubeID {
+                        Text("Trailer")
+                            .font(.headline)
                             .padding(.top, Constants.verticalTextSpacing)
+
+                        InlineTrailerView(youtubeID: trailerYouTubeID)
+                            .frame(maxWidth: Constants.trailerHeight)
                     }
                 }
-                .padding(.bottom, Constants.outerPadding)
-            }
-            .ignoresSafeArea(edges: .top)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        dismiss()
-                    }
+                .padding(.horizontal, Constants.outerPadding)
+
+                if let people = moviePage?.people, !people.isEmpty {
+                    CastRow(people: people)
+                        .padding(.top, Constants.verticalTextSpacing)
                 }
             }
-            .task {
-                async let trailer = TMDB.trailerYouTubeID(forMovieID: movie.id)
-                async let page = TMDB.moviePage(forMovieID: movie.id)
-                trailerYouTubeID = try? await trailer
-                moviePage = try? await page
-            }
+            .padding(.bottom, Constants.outerPadding)
         }
-        .preferredColorScheme(.dark)
+        .ignoresSafeArea(edges: .top)
+        .toolbarBackground(.hidden)
+        .task(id: movie.id) {
+            async let trailer = TMDB.trailerYouTubeID(forMovieID: movie.id)
+            async let page = TMDB.moviePage(forMovieID: movie.id)
+            trailerYouTubeID = try? await trailer
+            moviePage = try? await page
+        }
     }
 }
 
