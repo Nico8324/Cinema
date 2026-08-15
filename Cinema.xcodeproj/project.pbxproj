@@ -11,10 +11,21 @@
 		E9A0000000000000000000B1 /* YouTubeKit in Frameworks */ = {isa = PBXBuildFile; productRef = E9A0000000000000000000B3 /* YouTubeKit */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		E97E570000000000000000F8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C4462E6929AAAB2E00E3C854 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C4462E7029AAAB2E00E3C854;
+			remoteInfo = Cinema;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		3D967E9B031C16A162B2B54A /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		46AC02AEC4E46201C147C698 /* LICENSE.txt */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text; path = LICENSE.txt; sourceTree = "<group>"; };
 		C4462E7129AAAB2E00E3C854 /* Cinema.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cinema.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E97E570000000000000000F1 /* CinemaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CinemaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -47,6 +58,7 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		14B668042C12B88900C182FF /* Cinema */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (14B668402C12B88900C182FF /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = Cinema; sourceTree = "<group>"; };
 		14B668422C12B88E00C182FF /* Packages */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Packages; sourceTree = "<group>"; };
+		E97E570000000000000000F2 /* CinemaTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = CinemaTests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -56,6 +68,13 @@
 			files = (
 				E977D3492C0FCC98008D04F4 /* Studio in Frameworks */,
 				E9A0000000000000000000B1 /* YouTubeKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E97E570000000000000000F5 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -83,6 +102,7 @@
 			children = (
 				3D967E9B031C16A162B2B54A /* README.md */,
 				14B668042C12B88900C182FF /* Cinema */,
+				E97E570000000000000000F2 /* CinemaTests */,
 				14B668422C12B88E00C182FF /* Packages */,
 				C4462E7229AAAB2E00E3C854 /* Products */,
 				7CCD8CB6CDAE2F1883816AE4 /* Configuration */,
@@ -94,6 +114,7 @@
 			isa = PBXGroup;
 			children = (
 				C4462E7129AAAB2E00E3C854 /* Cinema.app */,
+				E97E570000000000000000F1 /* CinemaTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -125,6 +146,28 @@
 			productReference = C4462E7129AAAB2E00E3C854 /* Cinema.app */;
 			productType = "com.apple.product-type.application";
 		};
+		E97E570000000000000000F3 /* CinemaTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E97E570000000000000000F6 /* Build configuration list for PBXNativeTarget "CinemaTests" */;
+			buildPhases = (
+				E97E570000000000000000F4 /* Sources */,
+				E97E570000000000000000F5 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E97E570000000000000000F7 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				E97E570000000000000000F2 /* CinemaTests */,
+			);
+			name = CinemaTests;
+			packageProductDependencies = (
+			);
+			productName = CinemaTests;
+			productReference = E97E570000000000000000F1 /* CinemaTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -138,6 +181,9 @@
 				TargetAttributes = {
 					C4462E7029AAAB2E00E3C854 = {
 						CreatedOnToolsVersion = 15.0;
+					};
+					E97E570000000000000000F3 = {
+						TestTargetID = C4462E7029AAAB2E00E3C854;
 					};
 				};
 			};
@@ -164,6 +210,7 @@
 			projectRoot = "";
 			targets = (
 				C4462E7029AAAB2E00E3C854 /* Cinema */,
+				E97E570000000000000000F3 /* CinemaTests */,
 			);
 		};
 /* End PBXProject section */
@@ -186,7 +233,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E97E570000000000000000F4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		E97E570000000000000000F7 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C4462E7029AAAB2E00E3C854 /* Cinema */;
+			targetProxy = E97E570000000000000000F8 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		C4462E7E29AAAB2F00E3C854 /* Debug */ = {
@@ -418,6 +480,52 @@
 			};
 			name = Release;
 		};
+		E97E570000000000000000F9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = K9QJG36WW8;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.vanardoisnicolas.CinemaTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator xros xrsimulator";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Cinema.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Cinema";
+				XROS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Debug;
+		};
+		E97E570000000000000000FA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = K9QJG36WW8;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.vanardoisnicolas.CinemaTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator xros xrsimulator";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Cinema.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Cinema";
+				XROS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -435,6 +543,15 @@
 			buildConfigurations = (
 				C4462E8129AAAB2F00E3C854 /* Debug */,
 				C4462E8229AAAB2F00E3C854 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E97E570000000000000000F6 /* Build configuration list for PBXNativeTarget "CinemaTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E97E570000000000000000F9 /* Debug */,
+				E97E570000000000000000FA /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

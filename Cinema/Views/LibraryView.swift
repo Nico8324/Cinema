@@ -171,8 +171,16 @@ struct LibraryView: View {
                     try? await Task.sleep(for: minimumRingTime - elapsed)
                 }
                 importProgress.end()
-                if !outcome.failures.isEmpty {
-                    importErrorMessage = outcome.failures.joined(separator: "\n")
+
+                var messages = outcome.failures
+                if !outcome.duplicateFilenames.isEmpty {
+                    let names = outcome.duplicateFilenames.map { filename in
+                        allVideos.first { $0.localFilename == filename }?.name ?? String(localized: "a video")
+                    }
+                    messages.append(String(localized: "Already in your library: \(names.formatted())"))
+                }
+                if !messages.isEmpty {
+                    importErrorMessage = messages.joined(separator: "\n")
                 }
             }
         }

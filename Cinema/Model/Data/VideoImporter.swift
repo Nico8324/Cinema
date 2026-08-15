@@ -8,6 +8,7 @@ Imports user-picked video files into the app's library.
 import Foundation
 import SwiftData
 import OSLog
+import CryptoKit
 
 /// Observable state for an in-flight import, driving the Library's toolbar progress ring.
 @MainActor @Observable
@@ -48,14 +49,19 @@ enum VideoImporter {
         let duration: Int
     }
 
-    /// The outcome of an import run: the files that made it in, and per-file failure messages.
+    /// The outcome of an import run: the files that made it in, per-file failure
+    /// messages, and the stored filenames of duplicates that were skipped.
     struct Outcome: Sendable {
         var imported: [ImportedFile] = []
         var failures: [String] = []
+        var duplicateFilenames: [String] = []
     }
 
     /// Copies the picked files into the app's storage and probes their durations.
     /// Runs entirely off the main actor; UI stays responsive during multi-gigabyte copies.
+    ///
+    /// Files whose content already exists in the library are skipped and reported
+    /// in the outcome instead of silently duplicating disk usage.
     ///
     /// `onProgress` receives the overall fraction of bytes copied (0...1) across all
     /// files, from a background context — hop to the main actor before touching UI state.
@@ -70,6 +76,16 @@ enum VideoImporter {
 
         for sourceURL in sourceURLs {
             do {
+                if let existingFilename = existingLibraryFilename(matching: sourceURL) {
+                    outcome.duplicateFilenames.append(existingFilename)
+                    // Count the skipped bytes as done so overall progress stays honest.
+                    copiedBytes += fileSize(of: sourceURL)
+                    if totalBytes > 0 {
+                        onProgress(min(Double(copiedBytes) / Double(totalBytes), 1))
+                    }
+                    continue
+                }
+
                 let filename = try copyIntoLibrary(from: sourceURL) { chunkBytes in
                     copiedBytes += chunkBytes
                     if totalBytes > 0 {
@@ -90,6 +106,43 @@ enum VideoImporter {
 
         onProgress(1)
         return outcome
+    }
+
+    /// The stored filename of a library file with the same content as the picked file,
+    /// or `nil` if the file is new. Compares by size first (cheap), then by a hash of
+    /// the first megabyte — no metadata schema involved; the disk is the source of truth.
+    private nonisolated static func existingLibraryFilename(matching sourceURL: URL) -> String? {
+        let sourceSize = fileSize(of: sourceURL)
+        guard sourceSize > 0 else { return nil }
+
+        let fileManager = FileManager.default
+        guard let existing = try? fileManager.contentsOfDirectory(
+            at: MediaStore.videosDirectory,
+            includingPropertiesForKeys: [.fileSizeKey]
+        ) else { return nil }
+
+        let sameSizeCandidates = existing.filter { url in
+            Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? -1) == sourceSize
+        }
+        guard !sameSizeCandidates.isEmpty else { return nil }
+
+        guard let sourceHash = leadingHash(of: sourceURL) else { return nil }
+        return sameSizeCandidates.first { leadingHash(of: $0) == sourceHash }?.lastPathComponent
+    }
+
+    /// A SHA-256 digest of the file's first megabyte — combined with an exact size
+    /// match, near-certain identity without reading multi-gigabyte files end to end.
+    private nonisolated static func leadingHash(of url: URL) -> SHA256Digest? {
+        let didStartAccessing = url.startAccessingSecurityScopedResource()
+        defer {
+            if didStartAccessing {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: 1024 * 1024) else { return nil }
+        return SHA256.hash(data: data)
     }
 
     /// Creates and saves library entries for successfully imported files.
@@ -237,6 +290,12 @@ enum VideoImporter {
         let filename = UUID().uuidString + "." + sourceURL.pathExtension
         let destinationURL = MediaStore.videoURL(forFilename: filename)
 
+        if Thread.isMainThread {
+            // The whole point of this pipeline is staying off the main thread —
+            // if this fires, actor-inference semantics changed underneath us.
+            logger.fault("Import copy is running on the MAIN thread — UI will freeze for the whole copy.")
+        }
+
         let source = try FileHandle(forReadingFrom: sourceURL)
         defer { try? source.close() }
 
@@ -247,9 +306,20 @@ enum VideoImporter {
         do {
             let destination = try FileHandle(forWritingTo: destinationURL)
             defer { try? destination.close() }
-            while let chunk = try source.read(upToCount: copyChunkSize), !chunk.isEmpty {
-                try destination.write(contentsOf: chunk)
-                onChunk(Int64(chunk.count))
+            // Drain an autorelease pool every chunk: FileHandle returns autoreleased
+            // data, and without this a multi-gigabyte movie accumulates entirely in
+            // memory during the loop — enough to hit the platform memory limit and
+            // get the app killed mid-import (seen on Vision Pro, limit 5GB).
+            var reachedEnd = false
+            while !reachedEnd {
+                try autoreleasepool {
+                    guard let chunk = try source.read(upToCount: copyChunkSize), !chunk.isEmpty else {
+                        reachedEnd = true
+                        return
+                    }
+                    try destination.write(contentsOf: chunk)
+                    onChunk(Int64(chunk.count))
+                }
             }
         } catch {
             // Never leave a partial file behind — it would be an orphan with no library entry.

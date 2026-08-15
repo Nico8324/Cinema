@@ -85,10 +85,26 @@ struct Cinema: App {
 
     /// Initialize the model container and video player model.
     init() {
+        // As a unit-test host, boot with a throwaway in-memory store and touch
+        // nothing real: tests create their own containers, and registering the
+        // model classes twice with mismatched schemas traps inside SwiftData.
+        if NSClassFromString("XCTestCase") != nil {
+            let schema = Schema(versionedSchema: CinemaSchemaV3.self)
+            let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+            guard let container = try? ModelContainer(for: schema, configurations: [config]) else {
+                fatalError("Couldn't create the test-host model container.")
+            }
+            self.modelContainer = container
+            self._player = State(initialValue: PlayerModel(modelContainer: container))
+            return
+        }
+
         let modelContainer = Self.makeModelContainer()
         self.modelContainer = modelContainer
         self._player = State(initialValue: PlayerModel(modelContainer: modelContainer))
         ProfileStore.migrateLegacyPhotoIfNeeded()
+        // Sweep stranded files/entries once per launch, before any import can run.
+        LibraryReconciler.reconcile(in: modelContainer.mainContext)
     }
 
     /// Opens the video library store, migrating it if needed.

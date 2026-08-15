@@ -16,19 +16,24 @@ import OSLog
 enum MediaStore {
     static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Cinema", category: "MediaStore")
 
+    /// The container all media directories live under. The app always uses
+    /// Application Support; tests point this at a scratch directory so they
+    /// never touch a real library.
+    nonisolated(unsafe) static var rootDirectory: URL = .applicationSupportDirectory
+
     /// The directory holding imported video files.
     static var videosDirectory: URL {
-        URL.applicationSupportDirectory.appending(path: "Videos", directoryHint: .isDirectory)
+        rootDirectory.appending(path: "Videos", directoryHint: .isDirectory)
     }
 
     /// The directory holding generated poster thumbnails.
     static var thumbnailsDirectory: URL {
-        URL.applicationSupportDirectory.appending(path: "Thumbnails", directoryHint: .isDirectory)
+        rootDirectory.appending(path: "Thumbnails", directoryHint: .isDirectory)
     }
 
     /// The file holding the profile photo, stored as a downscaled JPEG.
     static var profileImageURL: URL {
-        URL.applicationSupportDirectory.appending(path: "profile.jpg", directoryHint: .notDirectory)
+        rootDirectory.appending(path: "profile.jpg", directoryHint: .notDirectory)
     }
 
     /// The location of an imported video file with the given stored filename.

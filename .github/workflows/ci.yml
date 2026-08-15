@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test-ios:
+    name: Build & test (iOS)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      # Secrets.swift is gitignored; the placeholder template compiles fine
+      # and no test talks to the network.
+      - name: Provide placeholder secrets
+        run: cp Cinema/Model/Data/Secrets.swift.example Cinema/Model/Data/Secrets.swift
+
+      - name: Build and test
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project Cinema.xcodeproj \
+            -scheme Cinema \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+            CODE_SIGNING_ALLOWED=NO
+
+  build-visionos:
+    name: Build (visionOS)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Provide placeholder secrets
+        run: cp Cinema/Model/Data/Secrets.swift.example Cinema/Model/Data/Secrets.swift
+
+      # Hosted runners don't preinstall the visionOS platform.
+      - name: Download visionOS platform
+        run: sudo xcodebuild -downloadPlatform visionOS
+
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project Cinema.xcodeproj \
+            -scheme Cinema \
+            -destination 'generic/platform=visionOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO

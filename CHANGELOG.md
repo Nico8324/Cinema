@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- Importing large movies no longer gets the app killed by the platform memory limit: the chunked copy accumulated every chunk in an undrained autorelease pool, so a multi-gigabyte import ballooned memory until visionOS terminated the app (found on Vision Pro, `EXC_RESOURCE` at the 5GB limit; verified fixed on hardware with a 20GB import). The copy loop now drains a pool per chunk.
+
+### Added
+- Duplicate detection on import: files whose content is already in the library (same size and leading hash) are skipped with an "Already in your library" notice instead of silently doubling disk usage.
+- Startup reconciliation: orphaned media files (copied but never registered, e.g. after a crash mid-import) and library entries whose backing file vanished are swept once per launch.
+- A unit test suite (schema migration V1→V3 against a real store file, import pipeline including duplicates, reconciliation, YouTube URL parsing, TMDB matching, model heuristics) and a GitHub Actions CI workflow building iOS + visionOS and running the tests on every push.
+
 ## [0.1.0] - 2026-08-15
 
 Foundation overhaul following a full architecture and Apple-guidelines review, plus YouTube, TMDB, and trailer integrations.
