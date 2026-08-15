@@ -163,6 +163,12 @@ struct LibraryView: View {
                     .scrollClipDisabled()
                 }
             }
+            // No title — the filter is the bar's content. Inline mode keeps the
+            // grid from leaving a large-title gap under the toolbar.
+            .navigationTitle("")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Picker("Category", selection: $filter) {
