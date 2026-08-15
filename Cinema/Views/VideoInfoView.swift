@@ -35,7 +35,14 @@ struct InfoView: View {
                 .font(isCompact ? .caption : .body)
                 .lineLimit(2, reservesSpace: true)
 
-            GenreView(genres: video.genres)
+            // Cards have a fixed width and genre lists come from real metadata —
+            // show only as many pills as actually fit.
+            ViewThatFits(in: .horizontal) {
+                GenreView(genres: video.genres)
+                GenreView(genres: Array(video.genres.prefix(2)))
+                GenreView(genres: Array(video.genres.prefix(1)))
+                Color.clear.frame(height: 1)
+            }
         }
         .padding(Constants.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -20,7 +20,9 @@ struct HeroView: View {
     let namespace: Namespace.ID
 
     var body: some View {
-        ZStack(alignment: .leading) {
+        // Text anchors to the poster's bottom-left, over the gradient — the sample
+        // centered it vertically, which only worked with its much taller artwork.
+        ZStack(alignment: .bottomLeading) {
             Group {
                 PosterImageView(video: video)
                     .aspectRatio(16 / 9, contentMode: .fit)
@@ -33,14 +35,18 @@ struct HeroView: View {
                 #endif
             }
 
+            // Real-world titles and synopses can be long — cap the overlay's lines
+            // so it never outgrows the poster behind it.
             VStack(alignment: .leading, spacing: Constants.verticalTextSpacing) {
                 Text(video.name)
                     .font(isCompact ? .title : .largeTitle)
                     .fontWeight(.bold)
+                    .lineLimit(2)
 
                 Text(video.synopsis)
                     .font(isCompact ? .caption : .body)
                     .fontWeight(isCompact ? .regular : .semibold)
+                    .lineLimit(isCompact ? 2 : 3)
 
                 NavigationLink("Details", value: NavigationNode.video(video.id))
                     #if os(iOS)
