@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A Movies / TV Shows switcher in the Library, in the toolbar next to the add button: All, Movies, or TV Shows, combining with the genre pills. A filter with nothing to show gets a clear empty state instead of a blank grid.
 - Refresh Metadata in Settings: one tap re-downloads titles, synopses, ratings, genres, trailers, and artwork from The Movie Database for every matched movie and show — with live progress and a summary of how many titles were updated. Unmatched entries are left alone; individual failures skip that title and keep going.
 
 ## [0.3.0] - 2026-08-15

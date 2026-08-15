@@ -22,7 +22,25 @@ struct LibraryView: View {
 
     @Namespace private var namespace
 
+    /// Which slice of the library the grid shows: everything, movies, or shows.
+    private enum LibraryFilter: String, CaseIterable, Identifiable {
+        case all
+        case movies
+        case shows
+
+        var id: String { rawValue }
+
+        var displayName: String {
+            switch self {
+            case .all: String(localized: "All")
+            case .movies: String(localized: "Movies")
+            case .shows: String(localized: "TV Shows")
+            }
+        }
+    }
+
     @State private var navigationPath = [NavigationNode]()
+    @State private var filter: LibraryFilter = .all
     @State private var selectedGenre: Genre?
     @State private var isPickingFile = false
     @State private var isAddingYouTubeVideo = false
@@ -58,16 +76,21 @@ struct LibraryView: View {
         }
     }
 
-    /// Movies and shows mixed alphabetically; a show's episodes group into one card.
+    /// Movies and shows mixed alphabetically; a show's episodes group into one
+    /// card. The toolbar filter narrows the grid to one type.
     private var libraryItems: [LibraryItem] {
         let videos = selectedGenre?.videos ?? allVideos
-        let movies = videos.filter { !$0.isEpisode }.map(LibraryItem.movie)
-        let shows = Dictionary(grouping: videos.filter(\.isEpisode)) { $0.showName ?? "" }
-            .map { name, episodes in
-                LibraryItem.show(name: name, episodes: episodes.sorted {
-                    ($0.seasonNumber ?? 0, $0.episodeNumber ?? 0) < ($1.seasonNumber ?? 0, $1.episodeNumber ?? 0)
-                })
-            }
+        let movies = filter == .shows
+            ? []
+            : videos.filter { !$0.isEpisode }.map(LibraryItem.movie)
+        let shows = filter == .movies
+            ? []
+            : Dictionary(grouping: videos.filter(\.isEpisode)) { $0.showName ?? "" }
+                .map { name, episodes in
+                    LibraryItem.show(name: name, episodes: episodes.sorted {
+                        ($0.seasonNumber ?? 0, $0.episodeNumber ?? 0) < ($1.seasonNumber ?? 0, $1.episodeNumber ?? 0)
+                    })
+                }
         return (movies + shows).sorted { $0.sortKey.localizedStandardCompare($1.sortKey) == .orderedAscending }
     }
 
@@ -104,6 +127,17 @@ struct LibraryView: View {
                             .scrollClipDisabled()
                             .padding(.bottom)
 
+                            if libraryItems.isEmpty {
+                                // Only reachable when the toolbar filter (or a
+                                // genre pill) leaves nothing to show.
+                                ContentUnavailableView(
+                                    filter == .shows ? String(localized: "No TV Shows") : String(localized: "No Movies"),
+                                    systemImage: filter == .shows ? "tv" : "film",
+                                    description: Text("Nothing in your library matches this filter.")
+                                )
+                                .padding(.top, Constants.outerPadding * 4)
+                            }
+
                             LazyVGrid(columns: columns, spacing: Constants.cardSpacing) {
                                 ForEach(libraryItems) { item in
                                     switch item {
@@ -132,6 +166,14 @@ struct LibraryView: View {
                 }
             }
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Picker("Category", selection: $filter) {
+                        ForEach(LibraryFilter.allCases) { filter in
+                            Text(filter.displayName).tag(filter)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
                 ToolbarItem(placement: .primaryAction) {
                     // While an import runs, the add button becomes a progress ring.
                     // Both states live inside button chrome so they share the same
