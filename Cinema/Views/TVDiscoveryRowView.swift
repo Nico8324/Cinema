@@ -79,7 +79,7 @@ private struct OwnedShowSheet: View {
         }
         // Steps aside when playback starts; the app's root presents the player.
         .dismissesForFullWindowPlayback()
-        .preferredColorScheme(.dark)
+        .appAppearance()
     }
 }
 
@@ -137,7 +137,7 @@ private struct DiscoveryShowSheet: View {
         }
         // Steps aside when playback starts; the app's root presents the player.
         .dismissesForFullWindowPlayback()
-        .preferredColorScheme(.dark)
+        .appAppearance()
     }
 }
 

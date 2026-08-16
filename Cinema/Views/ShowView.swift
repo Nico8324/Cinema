@@ -41,8 +41,10 @@ struct ShowView: View {
                     PosterImageView(video: cover)
                         .aspectRatio(16 / 9, contentMode: .fit)
                         .overlay(alignment: .bottomLeading) {
+                            // Background-colored scrim: black in dark mode,
+                            // white in light — the title stays legible in both.
                             LinearGradient(
-                                colors: [.clear, .black.opacity(0.8)],
+                                colors: [.clear, Color(.systemBackground).opacity(0.8)],
                                 startPoint: .top,
                                 endPoint: .bottom
                             )

@@ -31,11 +31,14 @@ struct HeroView: View {
             PosterImageView(video: video)
                 .aspectRatio(isCompact ? 3 / 4 : 16 / 9, contentMode: .fit)
                 .overlay {
-                    GradientView(style: .black.opacity(0.6), startPoint: .leading)
+                    // Background-style scrims: black in dark mode (the original
+                    // look), white in light mode — text over them stays legible
+                    // with the standard semantic colors either way.
+                    GradientView(style: .background.opacity(0.6), startPoint: .leading)
                 }
                 #if os(iOS)
                 .overlay(alignment: .bottom) {
-                    GradientView(style: .black, height: isCompact ? Constants.compactGradientSize : Constants.gradientSize / 2, startPoint: .bottom)
+                    GradientView(style: .background, height: isCompact ? Constants.compactGradientSize : Constants.gradientSize / 2, startPoint: .bottom)
                 }
                 #endif
                 .clipped()

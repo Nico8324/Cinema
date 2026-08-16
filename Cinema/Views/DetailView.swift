@@ -133,7 +133,7 @@ struct DetailView: View {
                 }
             }
             #if os(iOS)
-            .background(.black)
+            .background(.background)
             #endif
         }
         .scrollClipDisabled()
@@ -216,13 +216,15 @@ struct DetailView: View {
                 .frame(width: viewSize.width, height: viewSize.height)
                 .accessibilityHidden(true)
 
-            // Add a subtle gradient to make the text stand out.
+            // Add a subtle gradient to make the text stand out. The scrims use
+            // the background style so the page blends into black in dark mode
+            // (the original look) and into white in light mode, TV-app style.
             #if os(iOS)
-            GradientView(style: .black.opacity(0.6), direction: .horizontal, width: Constants.gradientSize, startPoint: .leading)
-            GradientView(style: .black, height: Constants.gradientSize, startPoint: .bottom)
+            GradientView(style: .background.opacity(0.6), direction: .horizontal, width: Constants.gradientSize, startPoint: .leading)
+            GradientView(style: .background, height: Constants.gradientSize, startPoint: .bottom)
             #else
-            GradientView(style: .black.opacity(0.4), direction: .horizontal, width: Constants.gradientSize, startPoint: .leading)
-            GradientView(style: .black.opacity(0.5), height: Constants.gradientSize, startPoint: .bottom)
+            GradientView(style: .background.opacity(0.4), direction: .horizontal, width: Constants.gradientSize, startPoint: .leading)
+            GradientView(style: .background.opacity(0.5), height: Constants.gradientSize, startPoint: .bottom)
             #endif
         }
         .padding([.horizontal, .bottom], -Constants.extendSafeAreaTV)

@@ -42,7 +42,7 @@ struct PersonSheet: View {
         // …so this sheet steps aside when playback starts and the app's
         // root presents the player.
         .dismissesForFullWindowPlayback()
-        .preferredColorScheme(.dark)
+        .appAppearance()
     }
 }
 

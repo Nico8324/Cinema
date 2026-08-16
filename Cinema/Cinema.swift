@@ -44,9 +44,10 @@ struct Cinema: App {
                 #if os(macOS) || os(visionOS)
                 .frame(minWidth: Constants.contentWindowWidth, maxWidth: .infinity, minHeight: Constants.contentWindowHeight, maxHeight: .infinity)
                 #endif
-                // Use a dark color scheme on supported platforms.
+                // Follow the user's appearance choice (Settings > Appearance);
+                // the default tracks the device's light/dark setting.
                 #if os(iOS) || os(macOS)
-                .preferredColorScheme(.dark)
+                .appAppearance()
                 #endif
         }
         #if !os(tvOS)

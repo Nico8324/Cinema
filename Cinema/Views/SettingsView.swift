@@ -18,6 +18,7 @@ struct SettingsView: View {
     @AppStorage(ProfileStore.nameKey) private var profileName: String = ""
     @AppStorage(TMDB.MovieList.storageKey) private var discoveryList: TMDB.MovieList = .nowPlaying
     @AppStorage(TMDB.ShowList.storageKey) private var tvDiscoveryList: TMDB.ShowList = .popular
+    @AppStorage(AppearanceSetting.storageKey) private var appearance: AppearanceSetting = .system
 
     @State private var isConfirmingClear = false
     @State private var refreshProgress: (completed: Int, total: Int)?
@@ -85,6 +86,16 @@ struct SettingsView: View {
                     Text("Library")
                 } footer: {
                     Text("Refresh Metadata re-downloads titles, artwork, and details from The Movie Database for every matched video and show.")
+                }
+
+                Section {
+                    Picker("Appearance", selection: $appearance) {
+                        ForEach(AppearanceSetting.allCases) { setting in
+                            Text(setting.displayName).tag(setting)
+                        }
+                    }
+                } footer: {
+                    Text("Automatic follows your device’s light or dark setting.")
                 }
 
                 Section {

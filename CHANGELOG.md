@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Light mode. The app now follows your device's light/dark setting, with an Appearance choice in Settings (Automatic, Light, Dark). The cinematic surfaces adapt like the TV app: poster scrims and page blends fade into white in light mode and into black in dark mode — the dark look is pixel-identical to before. Fixed along the way: the zoom-transition backing boxed Library movie cards in a black slab in light mode and hid their titles, and the hero's buttons washed out over light scrims.
 - A Movies / TV Shows switcher in the Library, in the toolbar next to the add button, combining with the genre pills. A side with nothing to show gets a clear empty state instead of a blank grid.
 - Refresh Metadata in Settings: one tap re-downloads titles, synopses, ratings, genres, trailers, and artwork from The Movie Database for every matched movie and show — with live progress and a summary of how many titles were updated. Unmatched entries are left alone; individual failures skip that title and keep going.
 

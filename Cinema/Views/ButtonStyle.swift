@@ -16,6 +16,9 @@ struct CustomButtonStyle: PrimitiveButtonStyle {
             .buttonStyle(.bordered)
             .buttonBorderShape(.capsule)
             .fontWeight(.medium)
+            // Primary-tinted so the label stays legible over the poster scrims
+            // in both appearances — the default accent washes out in light.
+            .tint(.primary)
             #if !os(tvOS)
             .controlSize(horizontalSizeClass == .compact ? .small : .regular)
             #endif
@@ -34,10 +37,12 @@ struct PickerButtonStyle: PrimitiveButtonStyle {
                 .buttonStyle(MacOSButtonStyle(isSelected: isSelected))
                 #else
                 .buttonStyle(.borderedProminent)
-                .foregroundStyle(.black)
+                // Inverted pill in both appearances: white pill with black text
+                // in dark mode, black pill with white text in light mode.
+                .foregroundStyle(.background)
                 .background {
                     RoundedRectangle(cornerRadius: 10)
-                        .fill(.white)
+                        .fill(.primary)
                 }
                 #endif
                 .modifier(PickerButtonModifier(isSelected: false))

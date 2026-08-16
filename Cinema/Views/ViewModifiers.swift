@@ -119,7 +119,9 @@ private struct TransitionSourceModifier: ViewModifier {
                 src
                     .clipShape(.rect(cornerRadius: 10.0))
                     .shadow(radius: 12.0)
-                    .background(.black)
+                    // Theme-matched backing: hardcoded black boxed the card in
+                    // a black slab in light mode and hid its title label.
+                    .background(Color(.systemBackground))
             }
             #endif
     }
