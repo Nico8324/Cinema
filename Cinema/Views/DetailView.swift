@@ -40,6 +40,23 @@ struct DetailView: View {
     }
 
     var body: some View {
+        // The real top inset, measured — the poster background is pulled up by
+        // exactly this much so it always touches the screen's top edge; the
+        // old hardcoded offsets came up short on newer iPhones.
+        GeometryReader { geometry in
+            detailContent(topInset: topInset(for: geometry))
+        }
+    }
+
+    private func topInset(for geometry: GeometryProxy) -> CGFloat {
+        #if os(iOS)
+        geometry.safeAreaInsets.top
+        #else
+        isCompact ? Constants.compactDetailSafeAreaHeight : Constants.detailSafeAreaHeight
+        #endif
+    }
+
+    private func detailContent(topInset: CGFloat) -> some View {
         ScrollView(showsIndicators: false) {
             VStack {
                 VStack(alignment: .leading, spacing: Constants.verticalTextSpacing) {
@@ -137,13 +154,12 @@ struct DetailView: View {
             #endif
         }
         .scrollClipDisabled()
-        .padding(.top, isCompact ? -Constants.compactDetailSafeAreaHeight : -Constants.detailSafeAreaHeight)
+        .padding(.top, -topInset)
         .onGeometryChange(for: CGSize.self) { proxy in
             return proxy.size
         } action: { size in
-            let heightPadding = (isCompact ? Constants.compactDetailSafeAreaHeight : Constants.detailSafeAreaHeight)
             let widthPadding = Constants.extendSafeAreaTV
-            viewSize = CGSize(width: size.width + widthPadding, height: size.height + heightPadding)
+            viewSize = CGSize(width: size.width + widthPadding, height: size.height + topInset)
         }
         // Don't show a navigation title in iOS.
         .navigationTitle("")
