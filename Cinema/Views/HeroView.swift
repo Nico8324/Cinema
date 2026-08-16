@@ -26,6 +26,16 @@ struct HeroView: View {
     let video: Video
     let namespace: Namespace.ID
 
+    /// The measured distance to the screen's top edge, provided by the
+    /// presenting screen; the platform constants are the fallback. Hardcoded
+    /// offsets leave a hairline of background above the poster on devices
+    /// whose real inset differs.
+    var topInset: CGFloat?
+
+    private var topPull: CGFloat {
+        topInset ?? (isCompact ? Constants.compactSafeAreaHeight : Constants.heroSafeAreaHeight)
+    }
+
     var body: some View {
         // Text anchors to the poster's bottom-left, over the gradient — the sample
         // centered it vertically, which only worked with its much taller artwork.
@@ -78,7 +88,7 @@ struct HeroView: View {
         }
         .transitionSource(id: video.id, namespace: namespace)
         .padding(.bottom, isCompact ? 0 : nil)
-        .padding(.top, isCompact ? -Constants.compactSafeAreaHeight : -Constants.heroSafeAreaHeight)
+        .padding(.top, -topPull)
         .padding(.horizontal, -Constants.extendSafeAreaTV)
         #if os(tvOS)
         .focusSection()

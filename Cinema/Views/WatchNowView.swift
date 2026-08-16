@@ -41,8 +41,11 @@ struct WatchNowView: View {
     #endif
 
     var body: some View {
-        // Wrap the content in a vertically scrolling view.
+        // Wrap the content in a vertically scrolling view. The geometry reader
+        // measures the real top inset so the hero can be pulled up to exactly
+        // the screen's top edge on any device.
         NavigationStack(path: $navigationPath) {
+            GeometryReader { geometry in
             Group {
                 if recentlyAddedVideos.isEmpty {
                     ContentUnavailableView(
@@ -56,7 +59,12 @@ struct WatchNowView: View {
                         VStack {
                             // Feature the latest addition to the library.
                             if let heroVideo = recentlyAddedVideos.first {
+                                #if os(iOS)
+                                HeroView(video: heroVideo, namespace: namespace,
+                                         topInset: geometry.safeAreaInsets.top)
+                                #else
                                 HeroView(video: heroVideo, namespace: namespace)
+                                #endif
                             }
 
                             // Display a horizontally scrolling list of videos and playlists.
@@ -90,6 +98,7 @@ struct WatchNowView: View {
                     }
                     .scrollClipDisabled()
                 }
+            }
             }
             .navigationDestinationVideo(in: namespace)
             // Refetches when the Settings choices change.
