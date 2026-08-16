@@ -38,7 +38,8 @@ struct ShowView: View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: Constants.verticalTextSpacing) {
                 if let cover = episodes.first {
-                    PosterImageView(video: cover)
+                    // The show's own backdrop once matched; episode art before.
+                    ShowArtworkView(cover: cover)
                         .aspectRatio(16 / 9, contentMode: .fit)
                         .overlay(alignment: .bottomLeading) {
                             // Background-colored scrim: black in dark mode,

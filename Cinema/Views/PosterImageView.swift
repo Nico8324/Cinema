@@ -57,6 +57,40 @@ struct PosterImageView: View {
     }
 }
 
+/// A show's card and header artwork: the show's own TMDB backdrop when the
+/// show is matched, falling back to the cover episode's thumbnail.
+struct ShowArtworkView: View {
+    /// The show's first episode — the fallback art and the match marker.
+    let cover: Video
+
+    @State private var artwork: Image?
+
+    var body: some View {
+        Group {
+            if let artwork {
+                Color(white: 0.12)
+                    .overlay {
+                        artwork
+                            .resizable()
+                            .scaledToFill()
+                    }
+                    .clipped()
+            } else {
+                PosterImageView(video: cover)
+            }
+        }
+        .task(id: cover.tmdbShowID) {
+            guard let showID = cover.tmdbShowID else {
+                artwork = nil
+                return
+            }
+            artwork = await PosterImageCache.image(
+                forThumbnailFilename: MediaStore.showArtworkFilename(forShowID: showID)
+            )
+        }
+    }
+}
+
 /// Loads and caches decoded poster thumbnails, keyed by thumbnail filename.
 @MainActor
 enum PosterImageCache {
@@ -69,6 +103,16 @@ enum PosterImageCache {
 
     static func image(for video: Video) async -> Image? {
         guard let url = video.thumbnailURL else { return nil }
+        return await image(at: url)
+    }
+
+    /// A thumbnail-directory image by filename — show-level artwork lives
+    /// there without belonging to any one video.
+    static func image(forThumbnailFilename filename: String) async -> Image? {
+        await image(at: MediaStore.thumbnailURL(forFilename: filename))
+    }
+
+    private static func image(at url: URL) async -> Image? {
         let key = url.lastPathComponent as NSString
         if let cached = cache.object(forKey: key) {
             return Image(platformImage: cached)

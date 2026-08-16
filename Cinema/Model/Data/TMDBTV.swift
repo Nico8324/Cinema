@@ -248,6 +248,8 @@ extension TMDB {
         let episodes: [Int: [Int: EpisodeInfo]]
         /// Episode still images keyed by season/episode, downloaded up front.
         let stills: [SeasonEpisodeKey: Data]
+        /// The show's own backdrop, for the show card and header artwork.
+        var backdropData: Data? = nil
     }
 
     struct SeasonEpisodeKey: Hashable, Sendable {
@@ -323,7 +325,14 @@ extension TMDB {
             episodes[season] = bySeason
         }
 
-        return ShowMatch(show: show, page: page, episodes: episodes, stills: stills)
+        // The show's backdrop becomes the shared card/header artwork.
+        var backdropData: Data?
+        if let backdropURL = show.backdropURL,
+           let (data, _) = try? await URLSession.shared.data(from: backdropURL) {
+            backdropData = data
+        }
+
+        return ShowMatch(show: show, page: page, episodes: episodes, stills: stills, backdropData: backdropData)
     }
 
     /// Applies a show match to all of the show's episodes in the library:
@@ -361,7 +370,24 @@ extension TMDB {
             }
         }
 
+        applyShowArtwork(match.backdropData, forShowID: match.show.id)
+
         Genre.deleteOrphaned(in: context)
         context.saveReportingErrors()
+    }
+
+    /// Saves the show's backdrop as the shared show-card and header artwork,
+    /// keyed by TMDB show ID — the episodes keep their own stills.
+    @MainActor
+    static func applyShowArtwork(_ data: Data?, forShowID showID: Int) {
+        guard let data else { return }
+        let filename = MediaStore.showArtworkFilename(forShowID: showID)
+        do {
+            try FileManager.default.createDirectory(at: MediaStore.thumbnailsDirectory, withIntermediateDirectories: true)
+            try data.write(to: MediaStore.thumbnailURL(forFilename: filename))
+            PosterImageCache.invalidate(forFilename: MediaStore.thumbnailURL(forFilename: filename).lastPathComponent)
+        } catch {
+            MediaStore.logger.error("Couldn't save the show backdrop for show \(showID): \(error.localizedDescription)")
+        }
     }
 }

@@ -283,7 +283,8 @@ private struct ShowCardView: View {
         VStack {
             ZStack(alignment: .topTrailing) {
                 if let cover = episodes.first {
-                    PosterImageView(video: cover)
+                    // The show's own backdrop once matched; episode art before.
+                    ShowArtworkView(cover: cover)
                         .aspectRatio(16 / 9, contentMode: .fit)
                         .cornerRadius(Constants.cornerRadius)
                 }

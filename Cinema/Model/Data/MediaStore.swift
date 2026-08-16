@@ -16,6 +16,12 @@ import OSLog
 enum MediaStore {
     static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Cinema", category: "MediaStore")
 
+    /// The shared card/header artwork for a matched show (its TMDB backdrop),
+    /// keyed by show ID — episodes keep their own stills.
+    static func showArtworkFilename(forShowID showID: Int) -> String {
+        "show-\(showID).jpg"
+    }
+
     /// The container all media directories live under. The app always uses
     /// Application Support; tests point this at a scratch directory so they
     /// never touch a real library.

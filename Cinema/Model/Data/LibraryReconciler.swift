@@ -25,9 +25,15 @@ enum LibraryReconciler {
 
         let fileManager = FileManager.default
         let referencedMedia = Set(videos.compactMap(\.localFilename))
+        // Per-video thumbnails, plus the shared show-backdrop artwork of every
+        // show that still has episodes in the library.
         let referencedThumbnails = Set(videos.compactMap { video in
             video.thumbnailFilename.map { MediaStore.thumbnailURL(forFilename: $0).lastPathComponent }
-        })
+        }).union(Set(videos.compactMap { video in
+            video.tmdbShowID.map {
+                MediaStore.thumbnailURL(forFilename: MediaStore.showArtworkFilename(forShowID: $0)).lastPathComponent
+            }
+        }))
 
         // Media files no library entry references: dead bytes — remove them.
         var removedOrphans = 0
