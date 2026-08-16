@@ -35,7 +35,10 @@ struct HeroView: View {
             // the 16:9 poster and break its full-bleed anchoring to the top edge.
             // A taller, cropped hero on iPhone (like the TV app) — a bare 16:9 strip
             // leaves no room for the title text above the gradient.
-            PosterImageView(video: video)
+            // Show-level artwork when a matched episode is featured (the hero
+            // is show branding, not an episode frame); movies and unmatched
+            // episodes fall back to their own thumbnail.
+            ShowArtworkView(cover: video)
                 .aspectRatio(isCompact ? 3 / 4 : 16 / 9, contentMode: .fit)
                 .overlay {
                     // Background-style scrims: black in dark mode (the original
