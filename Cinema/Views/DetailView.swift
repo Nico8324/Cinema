@@ -19,8 +19,16 @@ struct DetailView: View {
         horizontalSizeClass == .compact
     }
 
+    @Environment(\.colorScheme) private var colorScheme
+
     // `Video` is an observable model class — a plain `let` still drives updates.
     let video: Video
+
+    /// A white veil reads stronger than a black one over the same artwork, so
+    /// the side scrim eases off in light mode to keep the poster punchy.
+    private var sideScrimOpacity: Double {
+        colorScheme == .light ? 0.4 : 0.6
+    }
 
     @State private var viewSize: CGSize = CGSize(width: 0, height: 0)
     @State private var isConfirmingDelete = false
@@ -236,7 +244,7 @@ struct DetailView: View {
             // the background style so the page blends into black in dark mode
             // (the original look) and into white in light mode, TV-app style.
             #if os(iOS)
-            GradientView(style: .background.opacity(0.6), direction: .horizontal, width: Constants.gradientSize, startPoint: .leading)
+            GradientView(style: .background.opacity(sideScrimOpacity), direction: .horizontal, width: Constants.gradientSize, startPoint: .leading)
             GradientView(style: .background, height: Constants.gradientSize, startPoint: .bottom)
             #else
             GradientView(style: .background.opacity(0.4), direction: .horizontal, width: Constants.gradientSize, startPoint: .leading)

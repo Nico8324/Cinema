@@ -11,9 +11,16 @@ import SwiftData
 /// A view that displays the hero video banner.
 struct HeroView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.colorScheme) private var colorScheme
 
     private var isCompact: Bool {
         horizontalSizeClass == .compact
+    }
+
+    /// A white veil reads stronger than a black one over the same artwork, so
+    /// the side scrim eases off in light mode to keep the poster punchy.
+    private var sideScrimOpacity: Double {
+        colorScheme == .light ? 0.4 : 0.6
     }
 
     let video: Video
@@ -34,7 +41,7 @@ struct HeroView: View {
                     // Background-style scrims: black in dark mode (the original
                     // look), white in light mode — text over them stays legible
                     // with the standard semantic colors either way.
-                    GradientView(style: .background.opacity(0.6), startPoint: .leading)
+                    GradientView(style: .background.opacity(sideScrimOpacity), startPoint: .leading)
                 }
                 #if os(iOS)
                 .overlay(alignment: .bottom) {
