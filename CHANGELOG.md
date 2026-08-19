@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- The player's title bar now shows a subtitle line, the way the TV app does: the show name and episode number for episodes, the year and genres for matched movies. Fixed along the way: the genre metadata was passed as an array where the system expects a string.
+
 ### Changed
 - The carpet's slat profile now matches a per-pixel measurement of the original's close-ups: ridge and groove roughly equal (~45%/40% of each period) with a thin bright lip between them, and a dim ridge-top — previously the groove was a narrow 10% cut in a bright surface. Spill gains compensate the darker weave.
 

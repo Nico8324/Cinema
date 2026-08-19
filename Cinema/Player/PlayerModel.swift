@@ -385,8 +385,24 @@ enum Presentation {
             .commonIdentifierDescription: video.synopsis,
             .commonIdentifierCreationDate: video.yearOfRelease,
             .iTunesMetadataContentRating: video.contentRating,
-            .quickTimeMetadataGenre: video.genres.map(\.name)
+            // The player's title view expects a single string here, not an array.
+            .quickTimeMetadataGenre: video.genres.map(\.name).joined(separator: ", ")
         ]
+
+        // The subtitle line under the title in the player bar: the show context for an
+        // episode, the year and genres for a matched movie.
+        if video.isEpisode, let show = video.showName {
+            var subtitle = show
+            if let season = video.seasonNumber, let episode = video.episodeNumber {
+                subtitle += " · S\(season), E\(episode)"
+            }
+            mapping[.iTunesMetadataTrackSubTitle] = subtitle
+        } else if video.yearOfRelease > 0 {
+            let genres = video.genres.map(\.name).prefix(2).joined(separator: ", ")
+            mapping[.iTunesMetadataTrackSubTitle] = genres.isEmpty
+                ? String(video.yearOfRelease)
+                : "\(video.yearOfRelease) · \(genres)"
+        }
         // Artwork: the generated thumbnail, read once per playback start.
         if let thumbnailURL = video.thumbnailURL, let artwork = try? Data(contentsOf: thumbnailURL) {
             mapping[.commonIdentifierArtwork] = artwork
