@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The carpet's slat profile now matches a per-pixel measurement of the original's close-ups: ridge and groove roughly equal (~45%/40% of each period) with a thin bright lip between them, and a dim ridge-top — previously the groove was a narrow 10% cut in a bright surface. Spill gains compensate the darker weave.
+
 ### Fixed
 - The carpet is back: the ribbed slat texture had been silently corrupt since the six-seat build (a mis-escaped byte header made it an invalid PNG), so the ceiling and floor rendered smooth. Rebuilt correctly.
 - The seat button is reachable from every seat: the docked video composites over app content, and at the balcony's front row the enlarged screen's bottom edge covered the button's old spot. It now sits lower, clear of the screen from all six seats.

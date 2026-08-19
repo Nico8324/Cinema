@@ -31,7 +31,7 @@ SEATS = {
 # pool at 0.33x the screen's luminance and the floor at 0.22x — so each surface gets its own
 # copy of the material with its own diffuse gain. Calibrated against the identical frame docked
 # in both environments.
-DIFFUSE_GAINS = {"Ceiling": 2.2, "Floor": 3.5}
+DIFFUSE_GAINS = {"Ceiling": 5.3, "Floor": 8.4}
 
 
 def add_plane(stage, path, centre, u_axis, v_axis, u_size, v_size, segments, normal):

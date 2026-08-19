@@ -188,7 +188,7 @@ def Xform "Root"
             def Shader "Constant_2"
             {
                 uniform token info:id = "ND_constant_color3"
-                color3f inputs:value = (2.2, 2.2, 2.2) (
+                color3f inputs:value = (5.3, 5.3, 5.3) (
                     colorSpace = "lin_srgb"
                 )
                 color3f outputs:out
@@ -418,7 +418,7 @@ def Xform "Root"
             def Shader "Constant_2"
             {
                 uniform token info:id = "ND_constant_color3"
-                color3f inputs:value = (3.5, 3.5, 3.5) (
+                color3f inputs:value = (8.4, 8.4, 8.4) (
                     colorSpace = "lin_srgb"
                 )
                 color3f outputs:out
