@@ -109,9 +109,9 @@ struct ShowArtworkView: View {
 enum PosterImageCache {
     private static let cache = NSCache<NSString, PlatformImage>()
 
-    /// Drops the cached image for a thumbnail file whose contents changed on disk.
-    static func invalidate(forFilename filename: String) {
-        cache.removeObject(forKey: filename as NSString)
+    /// Drops the cached image for a file whose contents changed on disk.
+    static func invalidate(at url: URL) {
+        cache.removeObject(forKey: key(for: url))
     }
 
     /// The video's artwork in the requested shape, falling back to the wide artwork when there's
@@ -132,13 +132,24 @@ enum PosterImageCache {
     }
 
     static func image(at url: URL) async -> Image? {
-        let key = url.lastPathComponent as NSString
+        let key = key(for: url)
         if let cached = cache.object(forKey: key) {
             return Image(platformImage: cached)
         }
         guard let decoded = await decodeImage(at: url) else { return nil }
         cache.setObject(decoded, forKey: key)
         return Image(platformImage: decoded)
+    }
+
+    /// The whole path, not the file's name.
+    ///
+    /// A video's two pictures — the wide backdrop and the portrait poster — are deliberately stored
+    /// under the *same* name in different directories, so that one identity names both. Keyed by
+    /// name alone they collide in this cache, and whichever loaded first is handed to whoever asks
+    /// next: with posters switched on, a card would load the poster and the hero behind it, asking
+    /// for the wide artwork, would be given the poster instead.
+    private static func key(for url: URL) -> NSString {
+        url.path(percentEncoded: false) as NSString
     }
 
     /// Reads and decodes the image off the main actor.

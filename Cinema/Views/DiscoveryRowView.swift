@@ -84,6 +84,17 @@ private struct OwnedVideoSheet: View {
 private struct DiscoveryPosterCard: View {
     let movie: TMDB.Movie
 
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @AppStorage(ArtworkStyle.storageKey) private var artworkStyle: ArtworkStyle = .wide
+
+    /// Matches the library's own cards when they're posters too, so the rows line up; keeps its
+    /// own smaller size in wide mode, where being visibly different is the point.
+    private var posterWidth: Double {
+        artworkStyle == .poster
+            ? artworkStyle.cardWidth(isCompact: horizontalSizeClass == .compact)
+            : Constants.discoveryPosterWidth
+    }
+
     var body: some View {
         AsyncImage(url: movie.posterCardURL) { image in
             image
@@ -97,7 +108,7 @@ private struct DiscoveryPosterCard: View {
             }
         }
         .aspectRatio(2 / 3, contentMode: .fit)
-        .frame(width: Constants.discoveryPosterWidth)
+        .frame(width: posterWidth)
         .clipShape(.rect(cornerRadius: Constants.cornerRadius))
         #if os(iOS) || os(visionOS)
         .hoverEffect()

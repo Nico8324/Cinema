@@ -25,6 +25,12 @@ struct SettingsView: View {
     @State private var isConfirmingClear = false
     #if os(macOS)
     @AppStorage(MediaFolderScanner.folderPathKey) private var mediaFolderPath = ""
+
+    #if os(macOS)
+    @Environment(\.openWindow) private var openWindow
+    @AppStorage(ConversionPlan.cropCostingAnEncodeKey) private var cropsWhenItCostsAnEncode = false
+    @AppStorage(ConversionPlan.reencodeForStorageKey) private var reencodesForStorage = false
+    #endif
     @State private var isChoosingMediaFolder = false
     @State private var didCopyInstallCommand = false
     @State private var isScanningFolder = false
@@ -262,6 +268,12 @@ struct SettingsView: View {
                             .disabled(didCopyInstallCommand)
                         }
                     }
+                    Toggle("Re-encode to Save Space", isOn: $reencodesForStorage)
+                    Toggle("Crop Black Bars", isOn: $cropsWhenItCostsAnEncode)
+                    Button("Show Conversion Queue…") {
+                        openWindow(id: ConversionQueueView.windowID)
+                    }
+                    .disabled(ConverterTools.readiness == .unavailable || mediaFolderPath.isEmpty)
                 } header: {
                     Text("Conversion")
                 } footer: {
@@ -269,6 +281,14 @@ struct SettingsView: View {
                         Videos that aren’t MP4 — MKV and the rest — can’t join your library until they’re \
                         converted. Cinema uses the tools already installed on this Mac rather than shipping \
                         copies of them, and never modifies your originals. Converting is available on Mac only.
+                        
+                        Re-encode to Save Space rebuilds films that cost far more than Apple’s own \
+                        streams — a 74 GB disc becomes about 22 GB. It costs a generation of picture and \
+                        hours of work, so it’s off: copies are kept exactly as the studio mastered them.
+                        
+                        Crop Black Bars re-encodes widescreen films that could otherwise be copied straight \
+                        across. Copying keeps the picture exactly as the studio mastered it and takes minutes; \
+                        cropping gives a frame without bars and takes hours.
                         """)
                 }
                 #endif

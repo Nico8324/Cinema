@@ -45,6 +45,16 @@ enum ArtworkStyle: String, CaseIterable, Identifiable {
         }
     }
 
+    /// How wide a card of this style is, so every row showing the same shape lines up.
+    ///
+    /// Discovery rows used to size themselves independently, which was right when they were the
+    /// only portrait posters on the screen — a 2:3 card beside a 16:9 one reads as a different kind
+    /// of thing, deliberately. In poster mode everything is a poster, and the same difference stops
+    /// being a distinction and becomes a row that doesn't line up.
+    func cardWidth(isCompact: Bool) -> Double {
+        (isCompact ? Constants.compactVideoCardWidth : Constants.videoCardWidth) * cardWidthScale
+    }
+
     /// How many extra grid columns fit, now that each card is narrower.
     var extraGridColumns: Int {
         switch self {

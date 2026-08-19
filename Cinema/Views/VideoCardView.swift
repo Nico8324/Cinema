@@ -56,7 +56,7 @@ struct VideoCardView: View {
 
     /// The card's width, narrowed in poster mode so a portrait card doesn't tower over its row.
     private var cardWidth: Double {
-        (isCompact ? Constants.compactVideoCardWidth : Constants.videoCardWidth) * artworkStyle.cardWidthScale
+        artworkStyle.cardWidth(isCompact: isCompact)
     }
 
     private var watchProgress: Double? {

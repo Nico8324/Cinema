@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Choosing a seat is now part of the room itself: dim seat lights mark every position, the way a real cinema lights its rows — look at one and it lifts under your gaze; tap it and the room glides you there. The seat you occupy stays dark. The floating seat button is gone.
 - The Theater now dials with the Digital Crown like every other environment: it opens fully sealed, and turning the crown brings the real world back in around the room. It had been locked to full immersion since an early draft whose bare-bones room couldn't tolerate passthrough.
 - The player's title bar now shows a subtitle line, the way the TV app does: the show name and episode number for episodes, the year and genres for matched movies. Fixed along the way: the genre metadata was passed as an array where the system expects a string.
 

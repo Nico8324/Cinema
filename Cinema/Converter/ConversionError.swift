@@ -26,6 +26,16 @@ enum ConversionError: LocalizedError {
     /// other check, including profile, compatibility and RPU presence.
     case frameCountMismatch(video: Int, rpu: Int)
     case letterboxCropLost(expected: CGSize, actual: CGSize)
+    /// The re-encode returned a different number of frames than it was given.
+    case frameCountChanged(source: Int, output: Int)
+    /// The finished file plays, but a stricter reader can't parse it to the end.
+    case malformedContainer(String)
+    /// The finished file opens and reports itself playable, but no player can get a picture from it.
+    case doesNotRender(String)
+    /// The Dolby Vision came out in a form Apple's decoders won't render.
+    case dolbyVisionNotApplePlayable(compatibility: Int)
+    /// Dolby Vision profile 5, whose base layer can't be shown correctly without the metadata.
+    case dolbyVisionProfile5
     case failed(String)
 
     var errorDescription: String? {
@@ -57,6 +67,35 @@ enum ConversionError: LocalizedError {
                 The letterbox crop didn’t survive the rebuild — expected \(Int(expected.width))×\(Int(expected.height)) \
                 but the file plays at \(Int(actual.width))×\(Int(actual.height)), so it was deleted rather than kept \
                 looking cropped when it isn’t.
+                """)
+        case .frameCountChanged(let source, let output):
+            String(localized: """
+                The conversion came out a different length than the original \
+                (\(output) frames against \(source)), so it was deleted rather than kept — a film \
+                that gains or loses frames has its sound and its Dolby Vision on the wrong ones.
+                """)
+        case .malformedContainer(let detail):
+            String(localized: """
+                The converted file came out structurally damaged (\(detail)) — it would play, and \
+                then fail in ways nothing could explain later — so it was deleted rather than kept.
+                """)
+        case .doesNotRender(let detail):
+            String(localized: """
+                The converted file opened but never produced a picture\(detail.isEmpty ? "" : " (\(detail))") \
+                — it would have looked like a working film and played nothing — so it was deleted \
+                rather than added to your library.
+                """)
+        case .dolbyVisionNotApplePlayable(let compatibility):
+            String(localized: """
+                The Dolby Vision came out signalled as compatibility \(compatibility) rather than 1, \
+                which Apple devices show as a black screen. The file was deleted rather than added \
+                to your library.
+                """)
+        case .dolbyVisionProfile5:
+            String(localized: """
+                This film uses Dolby Vision profile 5, whose picture can only be shown correctly \
+                by a Dolby Vision display. Converting it would produce a file that looks right on \
+                one and wrong on every other screen, without saying so — so it was left alone.
                 """)
         case .failed(let message):
             message.isEmpty ? String(localized: "The conversion failed.") : message

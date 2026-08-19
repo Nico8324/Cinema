@@ -72,6 +72,15 @@ struct Cinema: App {
         #if os(macOS)
         PlayerWindow(player: player)
 
+        // The conversion queue gets a window rather than a Settings pane: it's a working list a
+        // person leaves open next to the library, not a preference they set once.
+        Window("Conversion Queue", id: ConversionQueueView.windowID) {
+            ConversionQueueView()
+                .appAppearance()
+        }
+        .defaultSize(width: 760, height: 560)
+        .keyboardShortcut("k", modifiers: [.command, .shift])
+
         // Settings belong in their own window off the app menu on the Mac (⌘,), the way every
         // Mac app puts them, rather than in a sheet over the library.
         Settings {

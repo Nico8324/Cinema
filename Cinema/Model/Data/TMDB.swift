@@ -478,7 +478,7 @@ enum TMDB {
         do {
             try FileManager.default.createDirectory(at: MediaStore.postersDirectory, withIntermediateDirectories: true)
             try data.write(to: url)
-            PosterImageCache.invalidate(forFilename: url.lastPathComponent)
+            PosterImageCache.invalidate(at: url)
             // Same two-step as `applyArtwork`: both writes inside one SwiftUI transaction would
             // cancel out, and no view would reload the changed file.
             video.hasPoster = false
@@ -499,7 +499,7 @@ enum TMDB {
         do {
             try FileManager.default.createDirectory(at: MediaStore.thumbnailsDirectory, withIntermediateDirectories: true)
             try data.write(to: MediaStore.thumbnailURL(forFilename: filename))
-            PosterImageCache.invalidate(forFilename: MediaStore.thumbnailURL(forFilename: filename).lastPathComponent)
+            PosterImageCache.invalidate(at: MediaStore.thumbnailURL(forFilename: filename))
             // Toggle hasThumbnail through false, restoring it on the next run-loop
             // cycle — both writes in one SwiftUI transaction would cancel out and
             // no view would reload the changed file.

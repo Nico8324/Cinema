@@ -411,7 +411,7 @@ extension TMDB {
         do {
             try FileManager.default.createDirectory(at: MediaStore.postersDirectory, withIntermediateDirectories: true)
             try data.write(to: url)
-            PosterImageCache.invalidate(forFilename: url.lastPathComponent)
+            PosterImageCache.invalidate(at: url)
         } catch {
             MediaStore.logger.error("Couldn't save the poster for show \(showID): \(error.localizedDescription)")
         }
@@ -426,7 +426,7 @@ extension TMDB {
         do {
             try FileManager.default.createDirectory(at: MediaStore.thumbnailsDirectory, withIntermediateDirectories: true)
             try data.write(to: MediaStore.thumbnailURL(forFilename: filename))
-            PosterImageCache.invalidate(forFilename: MediaStore.thumbnailURL(forFilename: filename).lastPathComponent)
+            PosterImageCache.invalidate(at: MediaStore.thumbnailURL(forFilename: filename))
         } catch {
             MediaStore.logger.error("Couldn't save the show backdrop for show \(showID): \(error.localizedDescription)")
         }
