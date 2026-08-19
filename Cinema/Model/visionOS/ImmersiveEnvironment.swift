@@ -59,13 +59,14 @@ import Theater
 
     /// How much of the real world the environment replaces.
     ///
-    /// Studio is a room you can dial yourself into with the Digital Crown. The theater is
-    /// sealed: any passthrough leaking in around the edges reads as a hole in the wall, so it
-    /// takes the whole view or none of it.
+    /// Both rooms dial with the Digital Crown, like the system environments. The theater opens
+    /// fully sealed — a cinema starts dark — and the crown can bring the real world back in.
+    /// (It was `.full` in early drafts, when the room was two floating planes and any
+    /// passthrough read as a hole in the wall; the finished room tolerates dialing.)
     public var immersionStyle: any ImmersionStyle {
         switch requestedDestination {
         case .studio: .progressive
-        case .theater: .full
+        case .theater: .progressive(0.2...1.0, initialAmount: 1.0)
         }
     }
 
