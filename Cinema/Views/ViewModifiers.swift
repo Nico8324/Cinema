@@ -34,6 +34,20 @@ extension View {
     func transitionSource(id: Video.ID, namespace: Namespace.ID) -> some View {
         self.modifier(TransitionSourceModifier(id: id, namespace: namespace))
     }
+
+    /// Gives a sheet a usable size on the Mac, and leaves every other platform alone.
+    ///
+    /// A Mac sheet takes its size from its content, and `List` and `Form` offer no height of
+    /// their own — so a sheet built from one collapses to nothing but its title bar and buttons,
+    /// with the actual content rendered into zero height. The touch platforms size sheets
+    /// themselves, so this is a no-op there.
+    func macSheetSize(width: CGFloat = 520, height: CGFloat = 560) -> some View {
+        #if os(macOS)
+        self.frame(width: width, height: height)
+        #else
+        self
+        #endif
+    }
 }
 
 #if !os(macOS)

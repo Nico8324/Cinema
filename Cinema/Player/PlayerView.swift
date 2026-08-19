@@ -6,6 +6,10 @@ A view that presents the video player.
 */
 
 import SwiftUI
+import RealityKit
+#if os(visionOS)
+import Theater
+#endif
 
 /// Constants that define the style of controls a player presents.
 enum PlayerControlsStyle {
@@ -48,10 +52,8 @@ struct PlayerView: View {
         switch controlsStyle {
         case .system:
             systemPlayerView
-                .onChange(of: model.shouldProposeNextVideo) { oldValue, newValue in
-                    if oldValue != newValue {
-                        showContextualActions = newValue
-                    }
+                .onChange(of: model.shouldProposeNextVideo) {
+                    showContextualActions = model.shouldProposeNextVideo
                 }
         case .custom:
             #if os(visionOS)
@@ -60,3 +62,4 @@ struct PlayerView: View {
         }
     }
 }
+

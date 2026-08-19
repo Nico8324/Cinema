@@ -73,7 +73,7 @@ struct EditVideoView: View {
             .listStyle(.insetGrouped)
             #endif
             .navigationTitle("Edit Video")
-            #if !os(macOS)
+            #if !os(macOS) && !os(tvOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
@@ -88,6 +88,7 @@ struct EditVideoView: View {
                 }
             }
         }
+        .macSheetSize(width: 540, height: 620)
     }
 
     private func toggleGenre(named name: String) {

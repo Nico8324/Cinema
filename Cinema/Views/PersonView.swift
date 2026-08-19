@@ -43,6 +43,7 @@ struct PersonSheet: View {
         // root presents the player.
         .dismissesForFullWindowPlayback()
         .appAppearance()
+        .macSheetSize(width: 640, height: 680)
     }
 }
 

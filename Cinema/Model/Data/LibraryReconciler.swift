@@ -49,7 +49,12 @@ enum LibraryReconciler {
         }
 
         // Entries whose imported file vanished can never play again — remove them
-        // (their thumbnails too, via removeLocalFiles). Remote entries are exempt.
+        // (their thumbnails too, via removeLocalFiles).
+        //
+        // Only entries the app imported are eligible, which the `localFilename` test enforces.
+        // Remote entries have no local file, and referenced entries must survive an unreachable
+        // path: an unplugged drive or a renamed folder is a temporary condition, not a reason to
+        // silently drop rows describing films the person still owns.
         var removedEntries = 0
         for video in videos {
             guard let localFilename = video.localFilename,

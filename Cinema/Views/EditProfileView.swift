@@ -42,7 +42,7 @@ struct EditProfileView: View {
         .listStyle(.insetGrouped)
         #endif
         .navigationTitle("Edit Profile")
-        #if !os(macOS)
+        #if !os(macOS) && !os(tvOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
         #if !os(tvOS)

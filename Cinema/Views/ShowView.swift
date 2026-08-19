@@ -45,7 +45,7 @@ struct ShowView: View {
                             // Background-colored scrim: black in dark mode,
                             // white in light — the title stays legible in both.
                             LinearGradient(
-                                colors: [.clear, Color(.systemBackground).opacity(0.8)],
+                                colors: [.clear, Color.platformBackground.opacity(0.8)],
                                 startPoint: .top,
                                 endPoint: .bottom
                             )

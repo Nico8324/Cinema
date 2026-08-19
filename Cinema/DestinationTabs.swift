@@ -17,6 +17,16 @@ struct DestinationTabs: View {
     @State private var selectedTab: Tabs = .watchNow
 
     var body: some View {
+        #if os(macOS)
+        // The Mac gets a grouped source list rather than a tab strip — see `SidebarNavigation`.
+        SidebarNavigation()
+        #else
+        tabs
+        #endif
+    }
+
+    #if !os(macOS)
+    private var tabs: some View {
         TabView(selection: $selectedTab) {
             Tab(Tabs.watchNow.name, systemImage: Tabs.watchNow.symbol, value: .watchNow) {
                 WatchNowView()
@@ -49,6 +59,7 @@ struct DestinationTabs: View {
         .tabViewCustomization($tabViewCustomization)
         #endif
     }
+    #endif
 }
 
 #Preview(traits: .previewData) {

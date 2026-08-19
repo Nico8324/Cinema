@@ -21,7 +21,10 @@ import AVKit
 /// both, so playback never interrupts.
 struct InlineTrailerView: View {
     @Environment(PlayerModel.self) private var mainPlayer
+    // Size classes are a touch-platform concept; macOS resizes its own player instead.
+    #if !os(macOS)
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    #endif
 
     let youtubeID: String
 
@@ -72,6 +75,7 @@ struct InlineTrailerView: View {
         // Rotating the phone to landscape while playing expands the trailer to
         // full screen; rotating back returns it inline. Playback continues
         // seamlessly — both presentations drive the same player.
+        #if !os(macOS)
         .onChange(of: verticalSizeClass) { _, newSizeClass in
             #if os(iOS)
             if newSizeClass == .compact, isShowingPlayer {
@@ -86,6 +90,7 @@ struct InlineTrailerView: View {
                 FullScreenTrailerView(player: player)
             }
         }
+        #endif
     }
 
     private func requestPlayback() {
@@ -205,6 +210,25 @@ private struct FullScreenTrailerView: View {
 }
 
 /// The system player, embedded inline. Standard controls include expand-to-full-screen.
+///
+/// Trailers opt out of Picture in Picture on every platform: they're previews that bypass the
+/// app's playback bookkeeping, so letting one float free of the detail page would strand it
+/// outside everything that tracks watching.
+#if os(macOS)
+private struct InlineSystemPlayerView: NSViewRepresentable {
+    let player: AVPlayer
+
+    func makeNSView(context: Context) -> AVPlayerView {
+        let playerView = AVPlayerView()
+        playerView.player = player
+        playerView.controlsStyle = .floating
+        playerView.allowsPictureInPicturePlayback = false
+        return playerView
+    }
+
+    func updateNSView(_ playerView: AVPlayerView, context: Context) {}
+}
+#else
 private struct InlineSystemPlayerView: UIViewControllerRepresentable {
     let player: AVPlayer
 
@@ -217,6 +241,7 @@ private struct InlineSystemPlayerView: UIViewControllerRepresentable {
 
     func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {}
 }
+#endif
 
 /// A 16:9 trailer card — YouTube's thumbnail with a play glyph — shown before playback starts.
 struct TrailerCardView: View {

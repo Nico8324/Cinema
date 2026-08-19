@@ -160,9 +160,17 @@ struct Constants {
     static let playerWindowWidth: Double = 960
     
     static let contentWindowHeight: Double = 600
-    
+
     static let contentWindowWidth: Double = 960
-    
+
+    /// The size the Mac's main window opens at — matching the TV app's own window, which sits at
+    /// 1220 × 720 with a 228-point source list.
+    static let defaultWindowWidth: Double = 1220
+
+    static let defaultWindowHeight: Double = 720
+
+    static let sidebarWidth: Double = 228
+
     static var watchNowSpacing: Double {
         #if os(macOS)
         5

@@ -23,7 +23,7 @@ struct LibraryView: View {
     @Namespace private var namespace
 
     /// Which slice of the library the grid shows: movies or shows.
-    private enum LibraryFilter: String, CaseIterable, Identifiable {
+    enum LibraryFilter: String, CaseIterable, Identifiable {
         case movies
         case shows
 
@@ -37,8 +37,14 @@ struct LibraryView: View {
         }
     }
 
+    /// Opens the grid on a particular slice. macOS picks the slice in the sidebar, the way the
+    /// TV app does, rather than with the in-content segmented control.
+    init(filter: LibraryFilter = .movies) {
+        _filter = State(initialValue: filter)
+    }
+
     @State private var navigationPath = [NavigationNode]()
-    @State private var filter: LibraryFilter = .movies
+    @State private var filter: LibraryFilter
     @State private var selectedGenre: Genre?
     @State private var isPickingFile = false
     @State private var isAddingYouTubeVideo = false
@@ -170,6 +176,9 @@ struct LibraryView: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
+                // On macOS the sidebar already names the slice, so an in-content picker would
+                // say the same thing twice.
+                #if !os(macOS)
                 ToolbarItem(placement: .principal) {
                     Picker("Category", selection: $filter) {
                         ForEach(LibraryFilter.allCases) { filter in
@@ -178,6 +187,7 @@ struct LibraryView: View {
                     }
                     .pickerStyle(.segmented)
                 }
+                #endif
                 ToolbarItem(placement: .primaryAction) {
                     // While an import runs, the add button becomes a progress ring.
                     // Both states live inside button chrome so they share the same
@@ -188,11 +198,15 @@ struct LibraryView: View {
                         }
                     } else {
                         Menu {
+                            // tvOS has no document browser to pick local files from, so adding
+                            // by link is the only route there.
+                            #if !os(tvOS)
                             Button {
                                 isPickingFile = true
                             } label: {
                                 Label("Choose Files", systemImage: "folder")
                             }
+                            #endif
                             Button {
                                 isAddingYouTubeVideo = true
                             } label: {
@@ -204,12 +218,14 @@ struct LibraryView: View {
                     }
                 }
             }
+            #if !os(tvOS)
             .fileImporter(
                 isPresented: $isPickingFile,
                 allowedContentTypes: [.movie, .video, .mpeg4Movie, .quickTimeMovie],
                 allowsMultipleSelection: true,
                 onCompletion: handlePickedFiles
             )
+            #endif
             .sheet(isPresented: $isAddingYouTubeVideo) {
                 AddYouTubeVideoView()
             }

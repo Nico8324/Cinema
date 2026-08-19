@@ -49,7 +49,7 @@ struct AddYouTubeVideoView: View {
             .listStyle(.insetGrouped)
             #endif
             .navigationTitle("Add from YouTube")
-            #if !os(macOS)
+            #if !os(macOS) && !os(tvOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .interactiveDismissDisabled(isAdding)
@@ -70,6 +70,7 @@ struct AddYouTubeVideoView: View {
                 }
             }
         }
+        .macSheetSize(width: 480, height: 360)
     }
 
     private func addVideo() {

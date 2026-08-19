@@ -37,7 +37,7 @@ enum ProfileStore {
     /// Downscales and saves a picked photo, bumping the version so views reload.
     static func savePhoto(_ data: Data) {
         guard let image = PlatformImage(data: data) else { return }
-        let scaled = downscaled(image, maxDimension: maxPhotoDimension)
+        let scaled = image.downscaled(maxDimension: maxPhotoDimension)
         guard let jpeg = scaled.jpegData(compressionQuality: 0.85) else { return }
         do {
             try jpeg.write(to: MediaStore.profileImageURL)
@@ -55,17 +55,6 @@ enum ProfileStore {
         UserDefaults.standard.removeObject(forKey: legacyPhotoDataKey)
     }
 
-    private static func downscaled(_ image: PlatformImage, maxDimension: CGFloat) -> PlatformImage {
-        let largestSide = max(image.size.width, image.size.height)
-        guard largestSide > maxDimension else { return image }
-        let scale = maxDimension / largestSide
-        let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1
-        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
-            image.draw(in: CGRect(origin: .zero, size: size))
-        }
-    }
 }
 
 /// The circular profile photo, shared by every surface that shows it.

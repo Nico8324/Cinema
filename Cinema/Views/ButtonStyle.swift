@@ -18,7 +18,13 @@ struct CustomButtonStyle: PrimitiveButtonStyle {
             .fontWeight(.medium)
             // Primary-tinted so the label stays legible over the poster scrims
             // in both appearances — the default accent washes out in light.
+            //
+            // Not on visionOS: there `.bordered` is a glass capsule and the tint fills the
+            // capsule rather than the label, so `.primary` paints a white pill under a white
+            // label. The system glass already stays legible over video and passthrough.
+            #if !os(visionOS)
             .tint(.primary)
+            #endif
             #if !os(tvOS)
             .controlSize(horizontalSizeClass == .compact ? .small : .regular)
             #endif

@@ -31,6 +31,19 @@ enum Presentation {
     /// A Boolean value that indicates whether the player should propose playing the next video in the Up Next list.
     private(set) var shouldProposeNextVideo = false
 
+    /// A Boolean value that indicates whether the video is currently playing in a Picture in Picture window.
+    ///
+    /// Picture in Picture outlives the app's own player UI — dismissing that UI is precisely what
+    /// hands the video to the floating window — so this flag marks the window as playback's owner
+    /// and keeps `reset()` from tearing down a player that's still on screen.
+    private(set) var isPictureInPictureActive = false
+
+    /// Whether AVKit asked the app to restore its player interface as Picture in Picture ends.
+    ///
+    /// The restore callback arrives *before* the did-stop callback, which is what lets the latter
+    /// tell "the person tapped return-to-app" apart from "the person closed the floating window."
+    private var isRestoringFromPictureInPicture = false
+
     /// An object that manages the playback of a video's media.
     private var player: AVPlayer
 
@@ -118,40 +131,45 @@ enum Presentation {
         controller.player = player
         playerUI = controller
 
-        #if os(visionOS)
-        @MainActor
-        class PlayerViewObserver: NSObject, AVPlayerViewControllerDelegate {
-            private var continuation: CheckedContinuation<Void, Never>?
-
-            func willEndFullScreenPresentation() async {
-                await withCheckedContinuation {
-                    continuation = $0
-                }
-            }
-
-            nonisolated func playerViewController(
-                _ playerViewController: AVPlayerViewController,
-                willEndFullScreenPresentationWithAnimationCoordinator coordinator: any UIViewControllerTransitionCoordinator
-            ) {
-                Task { @MainActor in
-                    continuation?.resume()
-                }
-            }
-        }
-
-        let observer = PlayerViewObserver()
-        controller.delegate = observer
-        playerUIDelegate = observer
-
-        Task {
-            await observer.willEndFullScreenPresentation()
-            reset()
-        }
-        #endif
+        let delegate = PlayerUIDelegate(model: self)
+        controller.delegate = delegate
+        playerUIDelegate = delegate
 
         return controller
     }
     #endif
+
+    // MARK: - Picture in Picture
+
+    /// Hands playback to the floating window and dismisses the app's own player.
+    ///
+    /// Without the dismissal the person is left on AVKit's "playing in Picture in Picture"
+    /// placeholder, which carries no controls — so the library stays unreachable for as long as
+    /// the video plays, defeating the one thing Picture in Picture is for.
+    fileprivate func pictureInPictureWillStart() {
+        isPictureInPictureActive = true
+        presentation = .inline
+    }
+
+    /// Restores full-window playback when the person taps return-to-app on the floating window.
+    fileprivate func restoreUserInterfaceForPictureInPictureStop() {
+        isRestoringFromPictureInPicture = true
+        presentation = .fullWindow
+    }
+
+    /// Releases the floating window's claim on playback.
+    ///
+    /// Closing the window ends playback outright, so the model tears down; returning to the app
+    /// doesn't, because `restoreUserInterfaceForPictureInPictureStop()` already put the player
+    /// back on screen.
+    fileprivate func pictureInPictureDidStop() {
+        isPictureInPictureActive = false
+        if isRestoringFromPictureInPicture {
+            isRestoringFromPictureInPicture = false
+        } else {
+            reset()
+        }
+    }
 
     private func observePlayback() {
         // Return early if the model calls this more than once.
@@ -333,6 +351,13 @@ enum Presentation {
 
     /// Clears any loaded media and resets the player model to its default state.
     func reset() {
+        // The app's player UI disappearing is the *start* of Picture in Picture, not the end of
+        // playback: the video is still on screen in the floating window. Clearing the player item
+        // here would kill that window the instant it appeared.
+        guard !isPictureInPictureActive else {
+            saveCurrentProgress()
+            return
+        }
         streamResolutionTask?.cancel()
         streamResolutionTask = nil
         itemStatusObservation?.invalidate()
@@ -446,3 +471,58 @@ enum Presentation {
         self.timeObserver = nil
     }
 }
+
+#if !os(macOS)
+/// Routes `AVPlayerViewController`'s life-cycle callbacks back into the model.
+///
+/// These callbacks are the only place that can tell why the app's player UI is going away:
+/// the person left playback, or the video moved to a Picture in Picture window that's still
+/// playing. The model can't distinguish the two on its own.
+@MainActor
+private final class PlayerUIDelegate: NSObject, AVPlayerViewControllerDelegate {
+
+    private weak var model: PlayerModel?
+
+    init(model: PlayerModel) {
+        self.model = model
+        super.init()
+    }
+
+    #if os(visionOS)
+    nonisolated func playerViewController(
+        _ playerViewController: AVPlayerViewController,
+        willEndFullScreenPresentationWithAnimationCoordinator coordinator: any UIViewControllerTransitionCoordinator
+    ) {
+        Task { @MainActor [weak self] in
+            self?.model?.reset()
+        }
+    }
+    #endif
+
+    nonisolated func playerViewControllerWillStartPictureInPicture(_ playerViewController: AVPlayerViewController) {
+        Task { @MainActor [weak self] in
+            self?.model?.pictureInPictureWillStart()
+        }
+    }
+
+    nonisolated func playerViewControllerDidStopPictureInPicture(_ playerViewController: AVPlayerViewController) {
+        Task { @MainActor [weak self] in
+            self?.model?.pictureInPictureDidStop()
+        }
+    }
+
+    nonisolated func playerViewController(
+        _ playerViewController: AVPlayerViewController,
+        restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void
+    ) {
+        // AVKit delivers this on the main thread, so restoring synchronously puts the player back
+        // before the handler reports success — which is what lets AVKit animate the video home
+        // instead of dropping it. The handler stays outside the main-actor closure because it's
+        // task-isolated: capturing it inside would be sending it across isolation domains.
+        MainActor.assumeIsolated {
+            model?.restoreUserInterfaceForPictureInPictureStop()
+        }
+        completionHandler(true)
+    }
+}
+#endif

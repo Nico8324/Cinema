@@ -109,6 +109,9 @@ struct WatchNowView: View {
                 discoveryShows = (try? await TMDB.shows(from: tvDiscoveryList)) ?? []
             }
             .toolbarBackground(.hidden)
+            // The Mac keeps its account row at the foot of the sidebar, so a second control
+            // floating over the artwork would only repeat it.
+            #if !os(macOS)
             .overlay(alignment: .topLeading) {
                 #if os(visionOS)
                 ProfileButtonView(action: { isShowingSettings = true })
@@ -116,6 +119,7 @@ struct WatchNowView: View {
                 ProfileMenuButton()
                 #endif
             }
+            #endif
             #if os(visionOS)
             .sheet(isPresented: $isShowingSettings) {
                 SettingsView()

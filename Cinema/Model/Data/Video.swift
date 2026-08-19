@@ -36,6 +36,14 @@ final class Video: Identifiable {
     @Attribute(originalName: "url")
     var remoteURL: URL?
 
+    /// The absolute path of a file the library references where it already sits on disk, rather
+    /// than copying into its own storage — how the Mac's scanned media folder works.
+    ///
+    /// Unlike `localFilename`, this *is* an absolute path, because the file isn't the app's to
+    /// move: it belongs to the person's own folder structure, outside any container the app
+    /// controls. Nothing here is ever deleted on the app's behalf.
+    var externalPath: String?
+
     var name: String
     var synopsis: String
     var yearOfRelease: Int
@@ -72,6 +80,7 @@ final class Video: Identifiable {
         genres: [Genre] = [],
         localFilename: String? = nil,
         remoteURL: URL? = nil,
+        externalPath: String? = nil,
         yearOfRelease: Int,
         duration: Int = 0,
         contentRating: String = "NR",
@@ -87,6 +96,7 @@ final class Video: Identifiable {
         self.uuid = UUID()
         self.localFilename = localFilename
         self.remoteURL = remoteURL
+        self.externalPath = externalPath
         self.name = name
         self.synopsis = synopsis
         self.yearOfRelease = yearOfRelease
@@ -145,10 +155,21 @@ extension Video {
     /// A URL that resolves to the video's playable media — the imported local file if there is
     /// one, otherwise the remote URL. `nil` when the video has no media at all.
     var mediaURL: URL? {
+        if let externalPath {
+            return URL(filePath: externalPath)
+        }
         if let localFilename {
             return MediaStore.videoURL(forFilename: localFilename)
         }
         return remoteURL
+    }
+
+    /// Whether the media lives in the person's own folder rather than the app's storage.
+    ///
+    /// Referenced media is off-limits for deletion and for the reconciler's stranded-file sweep:
+    /// an unreachable path means an unplugged drive or a moved folder, not a stale entry.
+    var isExternallyReferenced: Bool {
+        externalPath != nil
     }
 
     /// Whether this entry is a YouTube video rather than an imported file.
@@ -158,9 +179,13 @@ extension Video {
     }
 
     /// The filename that keys this video's generated thumbnail on disk.
-    /// Imported files use their stored filename; YouTube entries use their video ID.
+    ///
+    /// Imported files use their stored filename and YouTube entries their video ID. Referenced
+    /// files are keyed by the entry's own UUID: their real filenames can collide across folders,
+    /// and the thumbnail belongs to the app's storage even though the media doesn't.
     var thumbnailFilename: String? {
         if let localFilename { return localFilename }
+        if externalPath != nil { return "external-\(uuid.uuidString).jpg" }
         if let remoteURL, let id = YouTubeSource.videoID(from: remoteURL) {
             return "youtube-\(id).jpg"
         }
@@ -187,10 +212,16 @@ extension Video {
 
     /// Removes this video's files from disk: the imported media file and its thumbnail
     /// for local videos, or just the generated thumbnail for remote (YouTube) entries.
+    ///
+    /// Referenced media is deliberately untouched — `externalPath` never reaches `MediaStore`.
+    /// Removing an entry that points into the person's own folder must delete the library's
+    /// record of it and the thumbnail the app generated, never the film itself.
     func removeLocalFiles() {
         if let localFilename {
             MediaStore.removeMedia(forFilename: localFilename)
         } else if let thumbnailFilename {
+            // For referenced and YouTube entries this only reaches the generated thumbnail:
+            // the matching path under `Videos/` doesn't exist, so the removal is a no-op there.
             MediaStore.removeMedia(forFilename: thumbnailFilename)
         }
     }

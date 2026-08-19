@@ -58,7 +58,7 @@ struct TMDBSearchView: View {
                 }
             }
             .navigationTitle("Match Metadata")
-            #if !os(macOS)
+            #if !os(macOS) && !os(tvOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .searchable(text: $query, prompt: Text("Movie title"))
@@ -86,6 +86,7 @@ struct TMDBSearchView: View {
                 scheduleSearch()
             }
         }
+        .macSheetSize()
     }
 
     /// Debounces typing so TMDB isn't queried on every keystroke.

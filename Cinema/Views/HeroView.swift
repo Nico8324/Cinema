@@ -78,7 +78,9 @@ struct HeroView: View {
                     .lineLimit(isCompact ? 2 : 3)
 
                 NavigationLink("Details", value: NavigationNode.video(video.id))
-                    #if os(iOS)
+                    #if os(iOS) || os(macOS)
+                    // A filled pill, like the TV app's primary hero action — a bare link
+                    // disappeared into the artwork on the Mac.
                     .buttonStyle(CustomButtonStyle())
                     #endif
             }

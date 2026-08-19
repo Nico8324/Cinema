@@ -140,10 +140,13 @@ enum VideoImporter {
         return outcome
     }
 
-    /// The stored filename of a library file with the same content as the picked file,
+    /// The stored filename of a library file with the same content as the given file,
     /// or `nil` if the file is new. Compares by size first (cheap), then by a hash of
     /// the first megabyte — no metadata schema involved; the disk is the source of truth.
-    private nonisolated static func existingLibraryFilename(matching sourceURL: URL) -> String? {
+    ///
+    /// Used by the picker to skip re-importing, and by the Mac's folder scan to avoid listing a
+    /// film twice when the person already imported a copy of it.
+    nonisolated static func existingLibraryFilename(matching sourceURL: URL) -> String? {
         let sourceSize = fileSize(of: sourceURL)
         guard sourceSize > 0 else { return nil }
 
@@ -206,9 +209,13 @@ enum VideoImporter {
     /// actor; only the model update happens on it.
     @MainActor
     static func generateThumbnail(for video: Video, in context: ModelContext) {
-        guard let filename = video.localFilename else { return }
+        // Works for imported and referenced media alike — both resolve to a file on disk. The
+        // file-URL test keeps YouTube entries out: there's no frame to extract from a stream URL,
+        // and those get their poster from TMDB instead.
+        guard let mediaURL = video.mediaURL, mediaURL.isFileURL,
+              let filename = video.thumbnailFilename else { return }
         Task {
-            guard await writeThumbnailFile(from: MediaStore.videoURL(forFilename: filename), forFilename: filename) else {
+            guard await writeThumbnailFile(from: mediaURL, forFilename: filename) else {
                 // The video still works without a thumbnail — the poster placeholder stays in place.
                 return
             }
