@@ -11,7 +11,7 @@ Cinema is a personal video library app for iOS, iPadOS, and visionOS. Import you
 - **Search.** Find videos by title or genre from the dedicated Search tab.
 - **A real profile.** Set a name and photo from Settings.
 - **Native multiplatform UI.** Tab navigation and window customization built with SwiftUI, tailored to each platform.
-- **visionOS immersive environment.** Play video inside a custom Reality Composer Pro environment.
+- **visionOS immersive environments.** Play video inside the Studio, or in the Theater — a recreation of the Apple TV app's Cinema with six selectable seats across floor and balcony, where the room's ribbed ceiling and floor are lit by the picture itself.
 
 ## Architecture notes
 

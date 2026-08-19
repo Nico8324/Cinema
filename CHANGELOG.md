@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-19
+
+The Theater update: a one-of-one recreation of the Apple TV app's Cinema environment on visionOS, calibrated against captures of the original from inside the headset.
+
 ### Added
+- The Theater, a second visionOS immersive environment alongside Studio: a sealed black auditorium whose ribbed ceiling and floor catch the light of whatever is playing — a dark scene leaves the room black, a warm scene washes it amber. Built on RealityKit's video reflections (the same system feature Apple's environments use), with the video docking into the room and the glow tracking the picture live.
+- Six seats, matching Apple's Cinema grid: Front, Middle, and Back rows on Floor and Balcony levels. The floor slopes toward the screen; the balcony looks down from the upper level. Changing seats glides the whole room under you — the video stays docked throughout — and the app remembers where you sat.
+- A seat control inside the theater: a small chair button beside the player bar that unfolds into a Row and Level panel. Localized in all seven languages using each language's real theater vocabulary (Premier rang, Parterre, Balkon, 楼座…).
+- The environment picker now shows the Theater with its own thumbnail next to Studio's light and dark variants.
+
+### Also in this release
 - Matched shows now display their official TMDB artwork on the Library card and show-page header, instead of borrowing the first episode's still — matching how movies use their TMDB backdrop. Episode rows keep their per-episode stills; unmatched shows keep the episode thumbnail. Existing matches pick it up via Refresh Metadata or re-matching.
 - The detail page's artwork now reaches the very top of the screen on every iPhone: the poster was pulled up by a hardcoded offset that came up short on newer devices, leaving a background strip above it (invisible in dark mode, obvious in light). The offset is now the measured safe-area inset.
 - Light mode. The app now follows your device's light/dark setting, with an Appearance choice in Settings (Automatic, Light, Dark). The cinematic surfaces adapt like the TV app: poster scrims and page blends fade into white in light mode and into black in dark mode — the dark look is pixel-identical to before. Fixed along the way: the zoom-transition backing boxed Library movie cards in a black slab in light mode and hid their titles, and the hero's buttons washed out over light scrims.
