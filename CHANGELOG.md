@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The carpet is back: the ribbed slat texture had been silently corrupt since the six-seat build (a mis-escaped byte header made it an invalid PNG), so the ceiling and floor rendered smooth. Rebuilt correctly.
+- The seat button is reachable from every seat: the docked video composites over app content, and at the balcony's front row the enlarged screen's bottom edge covered the button's old spot. It now sits lower, clear of the screen from all six seats.
+
 ## [0.4.2] - 2026-08-19
 
 Screen-size calibration from a paired six-seat cross-examination — identical frame captured in every seat of both Apple's Cinema and ours.

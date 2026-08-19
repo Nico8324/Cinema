@@ -29,10 +29,12 @@ struct ImmersiveEnvironmentView: View {
                let pill = attachments.entity(for: "TheaterSeats") {
                 let headAnchor = AnchorEntity(.head)
                 headAnchor.anchoring.trackingMode = .once
-                // Beside where the system's floating control bar materializes — the bar is
-                // system UI with no attachment or pose API, so this is adjacency by
-                // construction: both are placed head-relative at spawn.
-                pill.position = [0.52, -0.32, -1.1]
+                // Low and near, clear of the screen: the docked video composites over app
+                // content, and at the balcony's front row the 14 m screen's bottom edge
+                // reaches ~28 degrees below the eye line — anything above that line is
+                // unreachable behind the picture. ~32 degrees down keeps the pill visible
+                // from every seat, just under the system bar.
+                pill.position = [0.30, -0.62, -1.0]
                 headAnchor.addChild(pill)
                 content.add(headAnchor)
             }
