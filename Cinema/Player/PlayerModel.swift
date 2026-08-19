@@ -148,6 +148,9 @@ enum Presentation {
     /// the video plays, defeating the one thing Picture in Picture is for.
     fileprivate func pictureInPictureWillStart() {
         isPictureInPictureActive = true
+        // A restore that was interrupted before its did-stop callback would otherwise leave this
+        // set, and the next close of the floating window would skip its teardown entirely.
+        isRestoringFromPictureInPicture = false
         presentation = .inline
     }
 
@@ -515,13 +518,22 @@ private final class PlayerUIDelegate: NSObject, AVPlayerViewControllerDelegate {
         _ playerViewController: AVPlayerViewController,
         restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void
     ) {
-        // AVKit delivers this on the main thread, so restoring synchronously puts the player back
-        // before the handler reports success — which is what lets AVKit animate the video home
-        // instead of dropping it. The handler stays outside the main-actor closure because it's
-        // task-isolated: capturing it inside would be sending it across isolation domains.
-        MainActor.assumeIsolated {
-            model?.restoreUserInterfaceForPictureInPictureStop()
+        // Restoring synchronously puts the player back before the handler reports success, which
+        // is what lets AVKit animate the video home instead of dropping it. AVKit delivers this
+        // on the main thread in practice, but `assumeIsolated` is a precondition rather than a
+        // check — it would terminate the app rather than degrade — so the main-thread case is
+        // tested rather than assumed, and anything else hops instead of trapping.
+        if Thread.isMainThread {
+            MainActor.assumeIsolated {
+                model?.restoreUserInterfaceForPictureInPictureStop()
+            }
+        } else {
+            Task { @MainActor [weak self] in
+                self?.model?.restoreUserInterfaceForPictureInPictureStop()
+            }
         }
+        // Outside the closure either way: the handler is task-isolated, so capturing it inside a
+        // main-actor closure would be sending it across isolation domains.
         completionHandler(true)
     }
 }

@@ -59,7 +59,9 @@ struct WatchNowView: View {
                         VStack {
                             // Feature the latest addition to the library.
                             if let heroVideo = recentlyAddedVideos.first {
-                                #if os(iOS)
+                                #if os(iOS) || os(macOS)
+                                // The measured inset, so the hero touches the window's top edge
+                                // whatever the title bar's height turns out to be.
                                 HeroView(video: heroVideo, namespace: namespace,
                                          topInset: geometry.safeAreaInsets.top)
                                 #else

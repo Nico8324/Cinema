@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-08-19
+
+Seat calibration against captures of all six positions in Apple's Cinema environment, panel visible.
+
+### Changed
+- The balcony is now a true upper tier: each balcony seat keeps its row's distance to the screen while rising about three metres, matching Apple's geometry — previously the balcony seats clustered at the back of the room and shrank the screen. The orchestra's front row also moved about a metre closer, matching the original's screen size.
+- The seat panel now mirrors Apple's exactly: groups labeled Row and Height, and the lower level named Orchestra (Orchestre, Parkett, 正厅…) — terminology taken from the original's own panel.
+
 ## [0.4.0] - 2026-08-19
 
 The Theater update: a one-of-one recreation of the Apple TV app's Cinema environment on visionOS, calibrated against captures of the original from inside the headset.

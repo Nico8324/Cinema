@@ -41,14 +41,25 @@ enum MediaFolderScanner {
         var added = 0
         /// Files the library already had, by path or by content — the usual result of a rescan.
         var alreadyPresent = 0
+        /// How many of the added videos TMDB identified confidently.
+        var matched = 0
         /// Whether the folder itself couldn't be read (moved, renamed, or on a drive that's away).
         var folderUnreachable = false
     }
 
-    /// Every video file under `folder`, recursively.
+    /// Every MP4 under `folder`, recursively.
     ///
-    /// Matching is by uniform type rather than a list of extensions, so anything the system knows
-    /// to be a movie counts, and a stray `.txt` never does.
+    /// Deliberately MP4 and nothing else. The library may only contain files that actually play,
+    /// and MP4 is what the converter produces — so anything else in the folder is a *candidate for
+    /// conversion*, not a library entry. Admitting a `.mkv` here would put a row on screen that
+    /// can never play, and admitting a `.mov` would quietly split the library across two formats
+    /// with different guarantees.
+    ///
+    /// The test is uniform-type conformance rather than a string comparison on the extension, so a
+    /// file is judged by what it is rather than what it is called. That matters in both directions:
+    /// an MKV on a Mac with VLC installed resolves to a real `public.movie` type and would sail
+    /// through a `.movie` check, while on a Mac without it the same file has no video type at all —
+    /// which is exactly how this filter came to look correct while being wrong.
     nonisolated static func videoFiles(in folder: URL) -> [URL] {
         let keys: Set<URLResourceKey> = [.isRegularFileKey, .contentTypeKey]
         guard let enumerator = FileManager.default.enumerator(
@@ -64,7 +75,7 @@ enum MediaFolderScanner {
             guard let values = try? url.resourceValues(forKeys: keys),
                   values.isRegularFile == true,
                   let type = values.contentType,
-                  type.conforms(to: .movie) || type.conforms(to: .video)
+                  type.conforms(to: .mpeg4Movie)
             else { continue }
             found.append(url)
         }
@@ -88,36 +99,56 @@ enum MediaFolderScanner {
         }
 
         let known = Set((try? context.fetch(FetchDescriptor<Video>()))?.compactMap(\.externalPath) ?? [])
-        // Walking a large folder tree is slow enough to keep off the main actor.
-        let files = await Task.detached { videoFiles(in: folder) }.value
 
-        let year = Calendar.current.component(.year, from: .now)
+        // Everything that touches the disk happens here, off the main actor: walking the tree,
+        // stat-ing each file, and hashing a megabyte of any that might be a duplicate. Left on
+        // the main actor this froze the app for the length of the scan — and the scan runs at
+        // launch, so the freeze was the first thing anyone saw.
+        let selection = await Task.detached { () -> (new: [URL], alreadyPresent: Int) in
+            var fresh: [URL] = []
+            var alreadyPresent = 0
+            // Content keys of the files accepted so far, so two identical copies inside the
+            // folder itself don't both become library entries — matching against what was
+            // previously imported catches only half the problem.
+            var acceptedContent = Set<String>()
+
+            for url in videoFiles(in: folder) {
+                guard !known.contains(url.path(percentEncoded: false)) else {
+                    alreadyPresent += 1
+                    continue
+                }
+                // A file the person imported before choosing a media folder is in the library
+                // twice over otherwise: once as the app's own copy, once as a reference to the
+                // original. The paths differ, so only matching on content catches it.
+                guard VideoImporter.existingLibraryFilename(matching: url) == nil else {
+                    alreadyPresent += 1
+                    continue
+                }
+                if let key = VideoImporter.contentKey(for: url), !acceptedContent.insert(key).inserted {
+                    alreadyPresent += 1
+                    continue
+                }
+                fresh.append(url)
+            }
+            return (fresh, alreadyPresent)
+        }.value
+
+        outcome.alreadyPresent = selection.alreadyPresent
+
+        // Only a fallback: a year the filename states beats the year the scan happened.
+        let scanYear = Calendar.current.component(.year, from: .now)
         var added: [Video] = []
 
-        for url in files {
+        for url in selection.new {
             let path = url.path(percentEncoded: false)
-            guard !known.contains(path) else {
-                outcome.alreadyPresent += 1
-                continue
-            }
-
-            // A file the person imported before choosing a media folder is in the library twice
-            // over otherwise: once as the app's own copy, once as a reference to the original.
-            // The paths differ, so only matching on content catches it. The check is cheap when
-            // nothing was ever imported — it compares sizes before it hashes anything.
-            guard VideoImporter.existingLibraryFilename(matching: url) == nil else {
-                outcome.alreadyPresent += 1
-                continue
-            }
-
-            let title = url.deletingPathExtension().lastPathComponent
-            let episode = VideoImporter.episodeMarker(in: title)
+            let parsed = FilenameMetadata.parse(url.deletingPathExtension().lastPathComponent)
+            let episode = parsed.episode
             let video = Video(
                 // Episodes take the show's name; the marker fields carry the rest.
-                name: episode?.showName ?? title,
-                synopsis: episode?.showName ?? title,
+                name: episode?.showName ?? parsed.title,
+                synopsis: episode?.showName ?? parsed.title,
                 externalPath: path,
-                yearOfRelease: year,
+                yearOfRelease: parsed.year ?? scanYear,
                 duration: await ThumbnailGenerator.duration(for: url),
                 showName: episode?.showName,
                 seasonNumber: episode?.season,
@@ -135,6 +166,20 @@ enum MediaFolderScanner {
                 VideoImporter.generateThumbnail(for: video, in: context)
             }
             logger.info("Added \(outcome.added) video(s) from \(folder.lastPathComponent).")
+        }
+
+        // Match everything still unidentified, not merely what this scan added.
+        //
+        // Restricting this to new arrivals made it unreachable in the ordinary case: a library
+        // built before matching existed, or one whose films were added while the network was
+        // down, would never be revisited — and since scanning is additive, there'd be nothing
+        // new to trigger it. Emptying the library and starting over shouldn't be the only way to
+        // get metadata. Entries that genuinely can't be identified are re-tried on each scan,
+        // which costs one search apiece and leaves them exactly as they were.
+        let unmatched = (try? context.fetch(FetchDescriptor<Video>()))?
+            .filter { $0.isEpisode ? $0.tmdbShowID == nil : $0.tmdbID == nil } ?? []
+        if !unmatched.isEmpty {
+            outcome.matched = await MetadataAutoMatch.match(unmatched, in: context)
         }
 
         return outcome

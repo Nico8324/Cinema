@@ -47,6 +47,8 @@ enum VideoImporter {
         let title: String
         /// The video's duration in whole seconds, or 0 if it couldn't be determined.
         let duration: Int
+        /// The release year stated in the filename, when it states one.
+        let year: Int?
         /// The episode marker parsed from the filename, for TV content.
         let episode: EpisodeMarker?
     }
@@ -123,12 +125,16 @@ enum VideoImporter {
                     }
                 }
                 let duration = await ThumbnailGenerator.duration(for: MediaStore.videoURL(forFilename: filename))
-                let title = sourceURL.deletingPathExtension().lastPathComponent
+                // Read through `FilenameMetadata` rather than taking the name literally: a raw
+                // `The.Invite.2026.2160p.WEB-DL.HEVC-GROUP` is both an unreadable library title
+                // and a useless thing to search TMDB with.
+                let parsed = FilenameMetadata.parse(sourceURL.deletingPathExtension().lastPathComponent)
                 outcome.imported.append(ImportedFile(
                     filename: filename,
-                    title: title,
+                    title: parsed.title,
                     duration: duration,
-                    episode: episodeMarker(in: title)
+                    year: parsed.year,
+                    episode: parsed.episode
                 ))
             } catch {
                 logger.error("Import failed for \(sourceURL.lastPathComponent): \(error.localizedDescription)")
@@ -165,6 +171,17 @@ enum VideoImporter {
         return sameSizeCandidates.first { leadingHash(of: $0) == sourceHash }?.lastPathComponent
     }
 
+    /// A cheap content identity for a file: its size paired with a hash of its first megabyte.
+    ///
+    /// Two files sharing a key are the same film as far as the library is concerned. Exposed so
+    /// callers can deduplicate a set of files against each other, not only against what's already
+    /// been imported — the folder scan needs both.
+    nonisolated static func contentKey(for url: URL) -> String? {
+        let size = fileSize(of: url)
+        guard size > 0, let hash = leadingHash(of: url) else { return nil }
+        return "\(size)-" + hash.map { String(format: "%02x", $0) }.joined()
+    }
+
     /// A SHA-256 digest of the file's first megabyte — combined with an exact size
     /// match, near-certain identity without reading multi-gigabyte files end to end.
     private nonisolated static func leadingHash(of url: URL) -> SHA256Digest? {
@@ -184,14 +201,15 @@ enum VideoImporter {
     /// Returns the inserted videos so callers can kick off thumbnail generation.
     @MainActor
     static func addVideos(for files: [ImportedFile], to context: ModelContext) -> [Video] {
-        let year = Calendar.current.component(.year, from: .now)
+        // Only a fallback: a year the filename actually states beats the year the import happened.
+        let importYear = Calendar.current.component(.year, from: .now)
         let videos = files.map { file in
             // Episodes take the show's name; the marker fields carry the rest.
             let video = Video(
                 name: file.episode?.showName ?? file.title,
                 synopsis: file.episode?.showName ?? file.title,
                 localFilename: file.filename,
-                yearOfRelease: year,
+                yearOfRelease: file.year ?? importYear,
                 duration: file.duration,
                 showName: file.episode?.showName,
                 seasonNumber: file.episode?.season,

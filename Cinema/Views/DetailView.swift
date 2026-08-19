@@ -57,7 +57,10 @@ struct DetailView: View {
     }
 
     private func topInset(for geometry: GeometryProxy) -> CGFloat {
-        #if os(iOS)
+        #if os(iOS) || os(macOS)
+        // Measured, never assumed. A Mac title bar's height depends on whether a toolbar is
+        // present and on the system's own metrics, so the hardcoded 40 left a band of window
+        // background above the artwork — the same failure the measured inset fixed on iOS.
         geometry.safeAreaInsets.top
         #else
         isCompact ? Constants.compactDetailSafeAreaHeight : Constants.detailSafeAreaHeight

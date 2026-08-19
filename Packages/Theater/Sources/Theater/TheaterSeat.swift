@@ -49,18 +49,20 @@ public struct TheaterSeat: Hashable, Sendable {
 
     /// Where this seat's eye point sits in the room's coordinates.
     ///
-    /// The room is authored around the floor's middle seat: its eye is the origin, the screen
-    /// hangs at (0, 2.35, -10.2). The floor slopes toward the screen — front rows sit lower.
-    /// The balcony is an upper level at the back of the room, looking down at the screen
-    /// (reference IMG_0086, pill "Dernier rang").
+    /// The room is authored around the orchestra's middle seat: its eye is the origin, the
+    /// screen hangs at (0, 2.35, -10.2). The floor slopes toward the screen — front rows sit
+    /// lower. The balcony is a full upper tier, not a rear deck: Apple's captures of all six
+    /// seats (`~/Xcode/Cinema-Backups/cinema apple variations/`) show each balcony row keeping its floor counterpart's
+    /// angular screen size, so each balcony seat preserves its row's slant distance to the
+    /// screen while rising ~3 m.
     public var eyeOffset: SIMD3<Float> {
         switch (level, row) {
-        case (.floor, .front): [0, -0.65, -3.4]
+        case (.floor, .front): [0, -0.65, -4.65]
         case (.floor, .middle): .zero
         case (.floor, .back): [0, 0.45, 4.3]
-        case (.balcony, .front): [0, 2.9, 2.6]
-        case (.balcony, .middle): [0, 3.25, 4.9]
-        case (.balcony, .back): [0, 3.6, 7.2]
+        case (.balcony, .front): [0, 2.6, -5.3]
+        case (.balcony, .middle): [0, 3.0, -0.45]
+        case (.balcony, .back): [0, 3.4, 3.9]
         }
     }
 

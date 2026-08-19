@@ -35,9 +35,12 @@ extension CinemaSuite {
                 id: 129552,
                 name: "Neuromancer",
                 overview: "Case, a washed-up hacker, is hired for one last job.",
+                originalName: "Neuromancer",
                 firstAirDate: "2026-04-01",
                 posterPath: nil,
-                backdropPath: nil
+                backdropPath: nil,
+                popularity: nil,
+                voteCount: nil
             )
             let page = TMDB.ShowPage(
                 name: "Neuromancer",

@@ -57,7 +57,8 @@ enum LibraryReconciler {
         // silently drop rows describing films the person still owns.
         var removedEntries = 0
         for video in videos {
-            guard let localFilename = video.localFilename,
+            guard !video.isExternallyReferenced,
+                  let localFilename = video.localFilename,
                   !fileManager.fileExists(atPath: MediaStore.videoURL(forFilename: localFilename).path) else {
                 continue
             }

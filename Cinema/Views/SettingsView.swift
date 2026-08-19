@@ -25,6 +25,7 @@ struct SettingsView: View {
     #if os(macOS)
     @AppStorage(MediaFolderScanner.folderPathKey) private var mediaFolderPath = ""
     @State private var isChoosingMediaFolder = false
+    @State private var didCopyInstallCommand = false
     @State private var isScanningFolder = false
     @State private var scanSummary: String?
     #endif
@@ -212,6 +213,7 @@ struct SettingsView: View {
                         }
                         HStack {
                             Button("Change…") { isChoosingMediaFolder = true }
+                                .disabled(isScanningFolder)
                             Button("Scan Now") { scanMediaFolder() }
                                 .disabled(isScanningFolder)
                             if isScanningFolder {
@@ -231,6 +233,38 @@ struct SettingsView: View {
                 } footer: {
                     Text("Videos in this folder are added to your library and played where they are — they aren't copied, and Cinema never moves or deletes them. The folder is rescanned each time the app opens.")
                 }
+
+                Section {
+                    LabeledContent("Video Tools") {
+                        Label {
+                            Text(converterStatusText)
+                        } icon: {
+                            Image(systemName: converterStatusSymbol)
+                                .foregroundStyle(converterStatusTint)
+                        }
+                        .labelStyle(.titleAndIcon)
+                    }
+                    if !ConverterTools.installCommand.isEmpty {
+                        HStack {
+                            Text(ConverterTools.installCommand)
+                                .font(.system(.footnote, design: .monospaced))
+                                .textSelection(.enabled)
+                            Spacer(minLength: 12)
+                            Button(didCopyInstallCommand ? "Copied" : "Copy") {
+                                copyInstallCommand()
+                            }
+                            .disabled(didCopyInstallCommand)
+                        }
+                    }
+                } header: {
+                    Text("Conversion")
+                } footer: {
+                    Text("""
+                        Videos that aren’t MP4 — MKV and the rest — can’t join your library until they’re \
+                        converted. Cinema uses the tools already installed on this Mac rather than shipping \
+                        copies of them, and never modifies your originals. Converting is available on Mac only.
+                        """)
+                }
                 #endif
 
                 Section("About") {
@@ -240,9 +274,52 @@ struct SettingsView: View {
     }
 
     #if os(macOS)
+    /// What the converter can do right now, said in terms of what it means for the library
+    /// rather than which binaries happen to be on disk.
+    private var converterStatusText: String {
+        switch ConverterTools.readiness {
+        case .ready:
+            String(localized: "Ready, including Dolby Vision")
+        case .readyWithoutDolbyVision:
+            String(localized: "Ready — Dolby Vision films convert as HDR10")
+        case .unavailable:
+            String(localized: "ffmpeg not found")
+        }
+    }
+
+    private var converterStatusSymbol: String {
+        switch ConverterTools.readiness {
+        case .ready: "checkmark.circle.fill"
+        case .readyWithoutDolbyVision: "exclamationmark.triangle.fill"
+        case .unavailable: "xmark.circle.fill"
+        }
+    }
+
+    private var converterStatusTint: Color {
+        switch ConverterTools.readiness {
+        case .ready: .green
+        case .readyWithoutDolbyVision: .orange
+        case .unavailable: .red
+        }
+    }
+
+    private func copyInstallCommand() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(ConverterTools.installCommand, forType: .string)
+        didCopyInstallCommand = true
+        // Return the button to its resting label so it reads as a control rather than a receipt.
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            didCopyInstallCommand = false
+        }
+    }
+
     /// Adds any videos in the chosen folder that the library doesn't already reference.
     private func scanMediaFolder() {
-        guard let folder = MediaFolderScanner.folderURL else { return }
+        // Non-reentrant: two overlapping scans each read the set of already-known paths before
+        // either has saved, so every file they share is inserted twice. Disabling the buttons
+        // isn't enough on its own — the folder picker calls straight through to here.
+        guard !isScanningFolder, let folder = MediaFolderScanner.folderURL else { return }
         isScanningFolder = true
         Task {
             let outcome = await MediaFolderScanner.scan(folder: folder, into: context)
@@ -251,10 +328,13 @@ struct SettingsView: View {
                 scanSummary = String(localized: "That folder can’t be reached right now.")
             } else if outcome.added == 0 {
                 scanSummary = String(localized: "No new videos found.")
-            } else if outcome.added == 1 {
-                scanSummary = String(localized: "Added 1 video.")
             } else {
-                scanSummary = String(localized: "Added \(outcome.added) videos.")
+                let added = outcome.added == 1
+                    ? String(localized: "Added 1 video.")
+                    : String(localized: "Added \(outcome.added) videos.")
+                scanSummary = outcome.matched > 0
+                    ? added + " " + String(localized: "Matched \(outcome.matched) with The Movie Database.")
+                    : added
             }
         }
     }

@@ -102,9 +102,12 @@ extension CinemaSuite {
                 id: 986055,
                 title: "Avengers: Doomsday",
                 overview: "Heroes collide.",
+                originalTitle: "Avengers: Doomsday",
                 releaseDate: "2026-12-16",
                 posterPath: "/poster.jpg",
-                backdropPath: "/backdrop.jpg"
+                backdropPath: "/backdrop.jpg",
+                popularity: nil,
+                voteCount: nil
             )
             let match = TMDB.Match(
                 movie: movie,

@@ -43,7 +43,10 @@ struct TheaterSeatsView: View {
     }
 
     private func panel(current: TheaterSeat) -> some View {
-        VStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Row", comment: "Theater seat panel group")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             HStack(spacing: 8) {
                 ForEach(TheaterSeat.Row.allCases, id: \.self) { row in
                     choice(row.displayName, isCurrent: row == current.row) {
@@ -51,7 +54,9 @@ struct TheaterSeatsView: View {
                     }
                 }
             }
-            Divider()
+            Text("Height", comment: "Theater seat panel group")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             HStack(spacing: 8) {
                 ForEach(TheaterSeat.Level.allCases, id: \.self) { level in
                     choice(level.displayName, isCurrent: level == current.level) {
@@ -93,7 +98,7 @@ extension TheaterSeat.Row {
 extension TheaterSeat.Level {
     var displayName: String {
         switch self {
-        case .floor: String(localized: "Floor", comment: "Theater level")
+        case .floor: String(localized: "Orchestra", comment: "Theater level")
         case .balcony: String(localized: "Balcony", comment: "Theater level")
         }
     }

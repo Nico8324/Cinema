@@ -265,6 +265,9 @@ struct LibraryView: View {
                 for video in newVideos {
                     VideoImporter.generateThumbnail(for: video, in: context)
                 }
+                // Picked files get the same automatic matching as scanned ones — the two routes
+                // put identical entries in the library, so they should learn identical metadata.
+                await MetadataAutoMatch.match(newVideos, in: context)
                 // Small files copy in milliseconds; hold the full ring briefly so the
                 // progress indicator reads as a state, not a glitch.
                 let minimumRingTime: Duration = .milliseconds(750)

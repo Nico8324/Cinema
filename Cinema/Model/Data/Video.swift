@@ -217,11 +217,17 @@ extension Video {
     /// Removing an entry that points into the person's own folder must delete the library's
     /// record of it and the thumbnail the app generated, never the film itself.
     func removeLocalFiles() {
-        if let localFilename {
+        // Tested first and explicitly: the safety used to rest on referenced entries happening to
+        // have no `localFilename`, which would quietly stop being true the moment one gained a
+        // cached local copy. Say what's meant instead of relying on a coincidence.
+        if isExternallyReferenced {
+            if let thumbnailFilename {
+                MediaStore.removeMedia(forFilename: thumbnailFilename)
+            }
+        } else if let localFilename {
             MediaStore.removeMedia(forFilename: localFilename)
         } else if let thumbnailFilename {
-            // For referenced and YouTube entries this only reaches the generated thumbnail:
-            // the matching path under `Videos/` doesn't exist, so the removal is a no-op there.
+            // A YouTube entry: only the generated thumbnail exists to remove.
             MediaStore.removeMedia(forFilename: thumbnailFilename)
         }
     }

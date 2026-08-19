@@ -18,9 +18,22 @@ enum TMDB {
         let id: Int
         let title: String
         let overview: String
+        /// The title in the film's own language, which is what filenames are almost always named
+        /// after. `title` is localized to whatever language the search asked for — a French
+        /// search returns *L'Invitation* for *The Invite* — so matching on `title` alone fails
+        /// for every film whose title was translated.
+        let originalTitle: String?
         let releaseDate: String?
         let posterPath: String?
         let backdropPath: String?
+        /// TMDB's own measure of how much attention a title is getting, and how many people have
+        /// rated it. Optional because only search and list endpoints return them.
+        ///
+        /// These are what separate a blockbuster from the fourteen other films sharing its exact
+        /// title — the automatic matcher can't work without them, because exact-title uniqueness
+        /// turns out to be vanishingly rare in a database this size.
+        let popularity: Double?
+        let voteCount: Int?
 
         /// The release year, parsed from the "yyyy-MM-dd" release date.
         var year: Int? {
@@ -40,6 +53,17 @@ enum TMDB {
         /// The landscape backdrop, sized for the app's 16:9 poster cards.
         var backdropURL: URL? {
             backdropPath.map { URL(string: "https://image.tmdb.org/t/p/w780\($0)")! }
+        }
+
+        /// The backdrop at the size TMDB holds it, for artwork the app keeps and shows full-bleed.
+        ///
+        /// The card size is far too small for a hero: a Mac window 1220 points wide shows the
+        /// artwork across roughly 1980 physical pixels on a 2× display, and a Vision Pro or a 4K
+        /// TV asks for more again — so `w780` arrives already needing to be stretched two and a
+        /// half times. This is downloaded once per film and stored, rather than on every scroll,
+        /// which is what makes the larger file worth it here and not on the browsing rows.
+        var fullResolutionBackdropURL: URL? {
+            backdropPath.map { URL(string: "https://image.tmdb.org/t/p/original\($0)")! }
         }
     }
 
@@ -112,9 +136,14 @@ enum TMDB {
                 id: id,
                 title: title,
                 overview: overview ?? "",
+                originalTitle: nil,
                 releaseDate: releaseDate,
                 posterPath: posterPath,
-                backdropPath: backdropPath
+                backdropPath: backdropPath,
+                // A filmography credit carries no ranking signals, and doesn't need them: it's
+                // already an identified title, not a candidate to choose between.
+                popularity: nil,
+                voteCount: nil
             )
         }
     }
@@ -378,7 +407,7 @@ enum TMDB {
     }
 
     private static func fetchBackdrop(for movie: Movie) async throws -> Data? {
-        guard let url = movie.backdropURL else { return nil }
+        guard let url = movie.fullResolutionBackdropURL else { return nil }
         let (data, _) = try await URLSession.shared.data(from: url)
         return data
     }

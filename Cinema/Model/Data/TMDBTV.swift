@@ -14,9 +14,14 @@ extension TMDB {
         let id: Int
         let name: String
         let overview: String
+        /// See `TMDB.Movie.originalTitle` — the untranslated name, which is what filenames use.
+        let originalName: String?
         let firstAirDate: String?
         let posterPath: String?
         let backdropPath: String?
+        /// See `TMDB.Movie.popularity` — the same ranking signals, for the same reason.
+        let popularity: Double?
+        let voteCount: Int?
 
         var year: Int? {
             firstAirDate.flatMap { Int($0.prefix(4)) }
@@ -35,6 +40,12 @@ extension TMDB {
         /// The landscape backdrop, sized for the app's 16:9 poster cards.
         var backdropURL: URL? {
             backdropPath.map { URL(string: "https://image.tmdb.org/t/p/w780\($0)")! }
+        }
+
+        /// See `TMDB.Movie.fullResolutionBackdropURL` — the stored show artwork is shown full-bleed
+        /// as a page header, so it needs the same treatment as a film's.
+        var fullResolutionBackdropURL: URL? {
+            backdropPath.map { URL(string: "https://image.tmdb.org/t/p/original\($0)")! }
         }
     }
 
@@ -202,9 +213,13 @@ extension TMDB {
                 id: id,
                 name: name,
                 overview: overview ?? "",
+                originalName: nil,
                 firstAirDate: firstAirDate,
                 posterPath: posterPath,
-                backdropPath: backdropPath
+                backdropPath: backdropPath,
+                // See `FilmCredit.asMovie` — an identified credit needs no ranking signals.
+                popularity: nil,
+                voteCount: nil
             )
         }
     }
@@ -327,7 +342,7 @@ extension TMDB {
 
         // The show's backdrop becomes the shared card/header artwork.
         var backdropData: Data?
-        if let backdropURL = show.backdropURL,
+        if let backdropURL = show.fullResolutionBackdropURL,
            let (data, _) = try? await URLSession.shared.data(from: backdropURL) {
             backdropData = data
         }
