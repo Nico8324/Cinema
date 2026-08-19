@@ -25,6 +25,8 @@ struct Cinema: App {
     @State private var contentBrightness: ImmersiveContentBrightness = .automatic
     /// The effect modifies the passthrough in immersive space.
     @State private var surroundingsEffect: SurroundingsEffect? = nil
+    /// How much of the real world the open environment replaces.
+    @State private var immersionStyle: any ImmersionStyle = .progressive
     #endif
 
     var body: some Scene {
@@ -39,6 +41,12 @@ struct Cinema: App {
                 #if os(macOS)
                 .toolbar(removing: .title)
                 .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+                // Pick up whatever landed in the media folder since the app last ran, so the
+                // library reflects the folder without anyone having to ask it to.
+                .task {
+                    guard let folder = MediaFolderScanner.folderURL else { return }
+                    _ = await MediaFolderScanner.scan(folder: folder, into: modelContainer.mainContext)
+                }
                 #endif
                 // Set minimum window size
                 #if os(macOS) || os(visionOS)
@@ -50,13 +58,26 @@ struct Cinema: App {
                 .appAppearance()
                 #endif
         }
-        #if !os(tvOS)
+        #if os(macOS)
+        // Open at the TV app's window size rather than collapsing onto the content's minimum.
+        // `.contentSize` would pin the window to that minimum and ignore this; `.contentMinSize`
+        // keeps the minimum as a floor and lets the person resize above it.
+        .defaultSize(width: Constants.defaultWindowWidth, height: Constants.defaultWindowHeight)
+        .windowResizability(.contentMinSize)
+        #elseif !os(tvOS)
         .windowResizability(.contentSize)
         #endif
 
         // The video player window
         #if os(macOS)
         PlayerWindow(player: player)
+
+        // Settings belong in their own window off the app menu on the Mac (⌘,), the way every
+        // Mac app puts them, rather than in a sheet over the library.
+        Settings {
+            SettingsView()
+                .modelContainer(modelContainer)
+        }
         #endif
 
         #if os(visionOS)
@@ -68,19 +89,22 @@ struct Cinema: App {
                     immersiveEnvironment.immersiveSpaceState = .open
                     contentBrightness = immersiveEnvironment.contentBrightness
                     surroundingsEffect = immersiveEnvironment.surroundingsEffect
+                    immersionStyle = immersiveEnvironment.immersionStyle
                 }
                 .onDisappear {
                     immersiveEnvironment.immersiveSpaceState = .closed
                     contentBrightness = .automatic
                     surroundingsEffect = nil
+                    immersionStyle = .progressive
                 }
             // Apply a custom tint color for the video passthrough of a person's hands and surroundings.
                 .preferredSurroundingsEffect(surroundingsEffect)
         }
         // Set the content brightness for the immersive space.
         .immersiveContentBrightness(contentBrightness)
-        // Set the immersion style to progressive, so the user can use the Digital Crown to dial in their experience.
-        .immersionStyle(selection: .constant(.progressive), in: .progressive)
+        // Studio is progressive, so the user can use the Digital Crown to dial in their
+        // experience; the theater is full, because a cinema with the wall open isn't one.
+        .immersionStyle(selection: $immersionStyle, in: .progressive, .full)
         #endif
     }
 
@@ -90,7 +114,7 @@ struct Cinema: App {
         // nothing real: tests create their own containers, and registering the
         // model classes twice with mismatched schemas traps inside SwiftData.
         if NSClassFromString("XCTestCase") != nil {
-            let schema = Schema(versionedSchema: CinemaSchemaV5.self)
+            let schema = Schema(versionedSchema: CinemaSchemaV6.self)
             let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
             guard let container = try? ModelContainer(for: schema, configurations: [config]) else {
                 fatalError("Couldn't create the test-host model container.")
@@ -130,7 +154,7 @@ struct Cinema: App {
     }
 
     private static func openModelContainer() throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CinemaSchemaV5.self)
+        let schema = Schema(versionedSchema: CinemaSchemaV6.self)
         return try ModelContainer(
             for: schema,
             migrationPlan: CinemaMigrationPlan.self,

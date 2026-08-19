@@ -8,6 +8,7 @@ The model that manages the environment.
 import SwiftUI
 import RealityKit
 import Studio
+import Theater
 
 ///  The model that manages the environment.
 @MainActor @Observable class ImmersiveEnvironment {
@@ -18,37 +19,78 @@ import Studio
         case open
     }
 
+    /// The environment to open, and how it's configured.
+    ///
+    /// The two destinations are built differently — Studio loads an authored scene with light
+    /// and dark states, the theater is generated in code per seat — so they can't share a single
+    /// state value.
+    enum Destination: Equatable {
+        case studio(EnvironmentStateType)
+        case theater(Theater.TheaterSeat)
+    }
+
     public var immersiveSpaceState = ImmersiveSpaceState.closed
 
     /// An object that handles the state of an environment opened in an immersive space.
     private var environmentStateHandler = EnvironmentStateHandler()
 
-    /// The state to set an environment to after it finishes loading.
-    private var requestedEnvironmentState: EnvironmentStateType = .light
+    /// The destination to show after the environment finishes loading.
+    private var requestedDestination: Destination = .studio(.light)
 
     public var contentBrightness: ImmersiveContentBrightness {
-        switch requestedEnvironmentState {
-        case .light: .dim
-        case .dark: .dark
-        case .none: .automatic
+        switch requestedDestination {
+        case .studio(.light): .dim
+        case .studio(.dark): .dark
+        case .studio(.none): .automatic
+        // A cinema is the darkest room the app has; nothing should compete with the screen.
+        case .theater: .dark
         }
     }
 
     public var surroundingsEffect: SurroundingsEffect? {
-        switch requestedEnvironmentState {
-        case .light: .colorMultiply(Color(red: 1.15, green: 1.2, blue: 1.4))
-        case .dark: .colorMultiply(Color(red: 0.13, green: 0.12, blue: 0.09))
-        case .none: nil
+        switch requestedDestination {
+        case .studio(.light): .colorMultiply(Color(red: 1.15, green: 1.2, blue: 1.4))
+        case .studio(.dark): .colorMultiply(Color(red: 0.13, green: 0.12, blue: 0.09))
+        case .studio(.none): nil
+        // Darker still than Studio's dark state, and neutral rather than warm.
+        case .theater: .colorMultiply(Color(red: 0.05, green: 0.05, blue: 0.06))
+        }
+    }
+
+    /// How much of the real world the environment replaces.
+    ///
+    /// Studio is a room you can dial yourself into with the Digital Crown. The theater is
+    /// sealed: any passthrough leaking in around the edges reads as a hole in the wall, so it
+    /// takes the whole view or none of it.
+    public var immersionStyle: any ImmersionStyle {
+        switch requestedDestination {
+        case .studio: .progressive
+        case .theater: .full
         }
     }
 
     public private(set) var rootEntity: Entity?
 
+    /// The seat the theater is currently showing, when the theater is the destination.
+    public var activeTheaterSeat: Theater.TheaterSeat? {
+        if case .theater(let seat) = requestedDestination { return seat }
+        return nil
+    }
+
     public func loadEnvironment() async -> Bool {
+        switch requestedDestination {
+        case .studio: await loadStudio()
+        case .theater(let seat): await loadTheater(seat: seat)
+        }
+    }
+
+    private func loadStudio() async -> Bool {
         do {
             let entity = try await Entity(named: "AAA_MainScene", in: studioBundle)
             environmentStateHandler.gatherEntities(from: entity)
-            setEnvironmentState(requestedEnvironmentState)
+            if case .studio(let state) = requestedDestination {
+                setEnvironmentState(state)
+            }
 
             rootEntity = entity
             return true
@@ -57,6 +99,38 @@ import Studio
 
             return false
         }
+    }
+
+    private func loadTheater(seat: Theater.TheaterSeat) async -> Bool {
+        do {
+            rootEntity = try await TheaterScene.makeEntity(seat: seat)
+            return true
+        } catch {
+            logger.error("Failed to build the theater environment: \(error.localizedDescription)")
+
+            return false
+        }
+    }
+
+    /// Moves to another seat without leaving the theater.
+    ///
+    /// The room is rebuilt for the new seat — the geometry and its baked light-spill data are
+    /// per-seat — and swapped under the open immersive space. The system re-docks the video to
+    /// the new docking region on its own.
+    /// Moves to another seat without leaving the theater.
+    ///
+    /// One room serves every seat, so this is a rigid move of the whole world — the head stays
+    /// fixed; the theater glides until the chosen seat is under the viewer. The docking region
+    /// travels with the room and the system keeps the video docked to it.
+    public func switchTheaterSeat(to seat: Theater.TheaterSeat) async {
+        guard case .theater(let current) = requestedDestination, current != seat,
+              let container = rootEntity, container.name == "TheaterContainer" else { return }
+        requestedDestination = .theater(seat)
+        Self.rememberSeat(seat)
+
+        var transform = container.transform
+        transform.translation = seat.roomTransform
+        container.move(to: transform, relativeTo: nil, duration: TheaterScene.seatMoveDuration, timingFunction: .easeInOut)
     }
 
     public func clearEnvironment() {
@@ -69,7 +143,21 @@ import Studio
             logger.warning("Requested environment state can not be set to none")
             return
         }
-        requestedEnvironmentState = state
+        requestedDestination = .studio(state)
+    }
+
+    public func requestTheaterSeat(_ seat: Theater.TheaterSeat) {
+        requestedDestination = .theater(seat)
+        Self.rememberSeat(seat)
+    }
+
+    /// The seat to open the theater at: wherever the person last sat.
+    public static var rememberedSeat: TheaterSeat {
+        TheaterSeat(name: UserDefaults.standard.string(forKey: "TheaterSeat") ?? "") ?? .middle
+    }
+
+    private static func rememberSeat(_ seat: TheaterSeat) {
+        UserDefaults.standard.set(seat.name, forKey: "TheaterSeat")
     }
 
     private func setEnvironmentState(_ state: EnvironmentStateType) {
@@ -109,3 +197,4 @@ import Studio
         }
     }
 }
+

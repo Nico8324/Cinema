@@ -1,0 +1,288 @@
+#usda 1.0
+(
+    defaultPrim = "Root"
+    metersPerUnit = 1
+    upAxis = "Y"
+)
+
+# Destination Video's own light-spill material, copied rather than reimplemented: it is the
+# reference implementation of RealityKit's video reflections, and every attempt to author an
+# equivalent graph by hand produced a material that evaluated to zero.
+#
+# The one input that differs from Studio's: its base texture is the studio floor's baked
+# lightmap, where a cinema's is simply black. Left empty the node reads as white and drowns
+# the spill it is supposed to sit under.
+def Xform "Root"
+{
+    def Material "LightSpill" (
+        references = None
+    )
+    {
+        asset inputs:Texture = @textures/Black.png@ (
+            customData = {
+                dictionary realitykit = {
+                    float2 positionInSubgraph = (-996.7243, 476.19012)
+                    int stackingOrderInSubgraph = 4713
+                }
+            }
+        )
+        token outputs:mtlx:surface.connect = </Root/LightSpill/UnlitSurface.outputs:out>
+        token outputs:realitykit:vertex
+        float2 ui:nodegraph:realitykit:subgraphOutputs:pos = (341.25, 106.5)
+
+        def Shader "Multiply" (
+            references = None
+        )
+        {
+            uniform token info:id = "ND_multiply_color3"
+            color3f inputs:in1.connect = </Root/LightSpill/Constant.outputs:out>
+            color3f inputs:in2.connect = </Root/LightSpill/Combine3_1.outputs:out>
+            color3f outputs:out
+            float2 ui:nodegraph:node:pos = (-557.81885, 158.30847)
+            int ui:nodegraph:node:stackingOrder = 4713
+        }
+
+        def Shader "Swizzle_1" (
+            references = None
+        )
+        {
+            uniform token info:id = "ND_swizzle_color4_color3"
+            string inputs:channels = "rgb"
+            color4f inputs:in.connect = </Root/LightSpill/RealitykitReflectionDiffuse_1.outputs:out>
+            color3f outputs:out
+            float2 ui:nodegraph:node:pos = (-589.7189, -79.19628)
+            int ui:nodegraph:node:stackingOrder = 4713
+        }
+
+        def Shader "RealitykitReflectionSpecular" (
+            references = None
+        )
+        {
+            uniform token info:id = "ND_realitykit_light_spill_specular"
+            float2 inputs:antialiasingStrength
+            float3 inputs:normal.connect = </Root/LightSpill/Normal_1.outputs:out>
+            float3 inputs:reflection_origin
+            float3 inputs:unreflected_direction.connect = </Root/LightSpill/ViewDirection_1.outputs:out>
+            color4f outputs:out
+            float2 ui:nodegraph:node:pos = (-1265.8586, 172.63564)
+            int ui:nodegraph:node:stackingOrder = 4713
+        }
+
+        def Shader "Normal_1" (
+            references = None
+        )
+        {
+            uniform token info:id = "ND_normal_vector3"
+            string inputs:space = "world"
+            float3 outputs:out
+            float2 ui:nodegraph:node:pos = (-1520.3969, 219.3036)
+            int ui:nodegraph:node:stackingOrder = 4713
+        }
+
+        def Shader "Image" (
+            references = None
+        )
+        {
+            uniform token info:id = "ND_image_color3"
+            color3f inputs:default
+            asset inputs:file.connect = </Root/LightSpill.inputs:Texture>
+            string inputs:filtertype
+            float2 inputs:texcoord.connect = </Root/LightSpill/UsdPrimvarReader_5.outputs:out>
+            string inputs:uaddressmode
+            string inputs:vaddressmode
+            color3f outputs:out
+            float2 ui:nodegraph:node:pos = (-716.46423, 512.229)
+            int ui:nodegraph:node:stackingOrder = 4713
+        }
+
+        def Shader "UsdPrimvarReader_5" (
+            references = None
+        )
+        {
+            uniform token info:id = "ND_UsdPrimvarReader_vector2"
+            float2 inputs:fallback
+            string inputs:varname = "UVChannel_1"
+            float2 outputs:out
+            float2 ui:nodegraph:node:pos = (-1020.0098, 586.65924)
+            int ui:nodegraph:node:stackingOrder = 4713
+            string[] ui:nodegraph:realitykit:node:attributesShowingChildren = ["inputs:varname"]
+        }
+
+        def Shader "Constant" (
+            references = None
+        )
+        {
+            uniform token info:id = "ND_constant_color3"
+            color3f inputs:value = (0.0, 0.0, 0.0) (
+                colorSpace = "lin_srgb"
+            )
+            color3f outputs:out
+            float2 ui:nodegraph:node:pos = (-755.0701, 118.9159)
+            int ui:nodegraph:node:stackingOrder = 4718
+        }
+
+        def Shader "ViewDirection_1" (
+            references = None
+        )
+        {
+            uniform token info:id = "ND_realitykit_viewdirection_vector3"
+            float3 outputs:out
+            float2 ui:nodegraph:node:pos = (-1564.654, 151.66467)
+            int ui:nodegraph:node:stackingOrder = 4713
+        }
+
+        def Shader "UsdPrimvarReader_3" (
+            references = None
+        )
+        {
+            uniform token info:id = "ND_UsdPrimvarReader_vector2"
+            float2 inputs:fallback
+            string inputs:varname = "attenuationUVs"
+            float2 outputs:out
+            float2 ui:nodegraph:node:pos = (-1205.6144, -86.79345)
+            int ui:nodegraph:node:stackingOrder = 4713
+        }
+
+        def Shader "RealitykitReflectionDiffuse_1" (
+            references = None
+        )
+        {
+            uniform token info:id = "ND_realitykit_light_spill_diffuse"
+            asset inputs:attenuationMap = @textures/DefaultAttenuationMap.exr@
+            float2 inputs:attenuationUV.connect = </Root/LightSpill/UsdPrimvarReader_3.outputs:out>
+            float2 inputs:emitterUV.connect = </Root/LightSpill/UsdPrimvarReader_4.outputs:out>
+            color4f outputs:out
+            float2 ui:nodegraph:node:pos = (-867.3927, -137.85753)
+            int ui:nodegraph:node:stackingOrder = 4715
+        }
+
+        def Shader "Add_2" (
+            references = None
+        )
+        {
+            uniform token info:id = "ND_add_color3"
+            color3f inputs:in1.connect = </Root/LightSpill/RibMultiply.outputs:out>
+            color3f inputs:in2.connect = </Root/LightSpill/Plus.outputs:out>
+            color3f outputs:out
+            float2 ui:nodegraph:node:pos = (-152.03864, 76.672005)
+            int ui:nodegraph:node:stackingOrder = 4713
+        }
+
+        def Shader "RibImage" (
+            references = None
+        )
+        {
+            uniform token info:id = "ND_image_color3"
+            color3f inputs:default = (1, 1, 1)
+            asset inputs:file = @textures/RibMask.png@
+            float2 inputs:texcoord.connect = </Root/LightSpill/UsdPrimvarReader_5.outputs:out>
+            string inputs:uaddressmode = "periodic"
+            string inputs:vaddressmode = "periodic"
+            color3f outputs:out
+        }
+
+        def Shader "RibMultiply" (
+            references = None
+        )
+        {
+            uniform token info:id = "ND_multiply_color3"
+            color3f inputs:in1.connect = </Root/LightSpill/Multiply_2.outputs:out>
+            color3f inputs:in2.connect = </Root/LightSpill/RibImage.outputs:out>
+            color3f outputs:out
+        }
+
+        def Shader "UnlitSurface" (
+            references = None
+        )
+        {
+            uniform token info:id = "ND_realitykit_unlit_surfaceshader"
+            bool inputs:applyPostProcessToneMap = 0
+            color3f inputs:color.connect = </Root/LightSpill/Add_2.outputs:out>
+            bool inputs:hasPremultipliedAlpha
+            float inputs:opacity
+            float inputs:opacityThreshold
+            token outputs:out
+            float2 ui:nodegraph:node:pos = (36.607483, 99.819954)
+            int ui:nodegraph:node:stackingOrder = 4713
+            string[] ui:nodegraph:realitykit:node:attributesShowingChildren = ["inputs:opacityThreshold"]
+        }
+
+        def Shader "Combine3_1" (
+            references = None
+        )
+        {
+            uniform token info:id = "ND_combine3_color3"
+            float inputs:in1.connect = </Root/LightSpill/Separate4_1.outputs:outr>
+            float inputs:in2.connect = </Root/LightSpill/Separate4_1.outputs:outg>
+            float inputs:in3.connect = </Root/LightSpill/Separate4_1.outputs:outb>
+            color3f outputs:out
+            float2 ui:nodegraph:node:pos = (-753.2741, 202.13002)
+            int ui:nodegraph:node:stackingOrder = 4713
+        }
+
+        def Shader "Constant_2" (
+            references = None
+        )
+        {
+            uniform token info:id = "ND_constant_color3"
+            color3f inputs:value = (1.15, 1.15, 1.15) (
+                colorSpace = "lin_srgb"
+            )
+            color3f outputs:out
+            float2 ui:nodegraph:node:pos = (-596.8414, -2.2888107)
+            int ui:nodegraph:node:stackingOrder = 4717
+        }
+
+        def Shader "Multiply_2" (
+            references = None
+        )
+        {
+            uniform token info:id = "ND_multiply_color3"
+            color3f inputs:in1.connect = </Root/LightSpill/Swizzle_1.outputs:out>
+            color3f inputs:in2.connect = </Root/LightSpill/Constant_2.outputs:out>
+            color3f outputs:out
+            float2 ui:nodegraph:node:pos = (-402.79825, -43.70446)
+            int ui:nodegraph:node:stackingOrder = 4713
+        }
+
+        def Shader "Plus" (
+            references = None
+        )
+        {
+            uniform token info:id = "ND_plus_color3"
+            color3f inputs:bg.connect = </Root/LightSpill/Image.outputs:out>
+            color3f inputs:fg.connect = </Root/LightSpill/Multiply.outputs:out>
+            float inputs:mix.connect = </Root/LightSpill/Separate4_1.outputs:outa>
+            color3f outputs:out
+            float2 ui:nodegraph:node:pos = (-355.96445, 221.08522)
+            int ui:nodegraph:node:stackingOrder = 4713
+        }
+
+        def Shader "Separate4_1" (
+            references = None
+        )
+        {
+            uniform token info:id = "ND_separate4_color4"
+            color4f inputs:in.connect = </Root/LightSpill/RealitykitReflectionSpecular.outputs:out>
+            float outputs:outa
+            float outputs:outb
+            float outputs:outg
+            float outputs:outr
+            float2 ui:nodegraph:node:pos = (-984.3259, 226.73366)
+            int ui:nodegraph:node:stackingOrder = 4713
+        }
+
+        def Shader "UsdPrimvarReader_4" (
+            references = None
+        )
+        {
+            uniform token info:id = "ND_UsdPrimvarReader_vector2"
+            float2 inputs:fallback
+            string inputs:varname = "emitterUVs"
+            float2 outputs:out
+            float2 ui:nodegraph:node:pos = (-1205.4513, -247.09924)
+            int ui:nodegraph:node:stackingOrder = 4713
+            string[] ui:nodegraph:realitykit:node:attributesShowingChildren = ["inputs:fallback"]
+        }
+    }
+}

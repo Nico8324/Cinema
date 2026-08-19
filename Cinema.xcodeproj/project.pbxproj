@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		E977D3492C0FCC98008D04F4 /* Studio in Frameworks */ = {isa = PBXBuildFile; platformFilters = (xros, ); productRef = E977D3482C0FCC98008D04F4 /* Studio */; };
+		E977D34A2C0FCC98008D04F5 /* Theater in Frameworks */ = {isa = PBXBuildFile; platformFilters = (xros, ); productRef = E977D34B2C0FCC98008D04F5 /* Theater */; };
 		E9A0000000000000000000B1 /* YouTubeKit in Frameworks */ = {isa = PBXBuildFile; productRef = E9A0000000000000000000B3 /* YouTubeKit */; };
 /* End PBXBuildFile section */
 
@@ -50,6 +51,9 @@
 				Views/visionOS/ProfileButton.swift = (
 					xros,
 				);
+				Views/visionOS/TheaterSeatsView.swift = (
+					xros,
+				);
 			};
 			target = C4462E7029AAAB2E00E3C854 /* Cinema */;
 		};
@@ -67,6 +71,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E977D3492C0FCC98008D04F4 /* Studio in Frameworks */,
+				E977D34A2C0FCC98008D04F5 /* Theater in Frameworks */,
 				E9A0000000000000000000B1 /* YouTubeKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -140,6 +145,7 @@
 			name = Cinema;
 			packageProductDependencies = (
 				E977D3482C0FCC98008D04F4 /* Studio */,
+				E977D34B2C0FCC98008D04F5 /* Theater */,
 				E9A0000000000000000000B3 /* YouTubeKit */,
 			);
 			productName = Cinema;
@@ -411,14 +417,14 @@
 				PRODUCT_NAME = Cinema;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator xros xrsimulator";
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator macosx xros xrsimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2,3,7";
 				TVOS_DEPLOYMENT_TARGET = 26.0;
 				XROS_DEPLOYMENT_TARGET = 26.0;
 			};
@@ -467,14 +473,14 @@
 				PRODUCT_NAME = Cinema;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator xros xrsimulator";
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator macosx xros xrsimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2,3,7";
 				TVOS_DEPLOYMENT_TARGET = 26.0;
 				XROS_DEPLOYMENT_TARGET = 26.0;
 			};
@@ -493,11 +499,11 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.vanardoisnicolas.CinemaTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator xros xrsimulator";
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator macosx xros xrsimulator";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2,3,7";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Cinema.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Cinema";
 				XROS_DEPLOYMENT_TARGET = 26.0;
 			};
@@ -516,11 +522,11 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.vanardoisnicolas.CinemaTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator xros xrsimulator";
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator macosx xros xrsimulator";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2,3,7";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Cinema.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Cinema";
 				XROS_DEPLOYMENT_TARGET = 26.0;
 			};
@@ -573,6 +579,10 @@
 		E977D3482C0FCC98008D04F4 /* Studio */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Studio;
+		};
+		E977D34B2C0FCC98008D04F5 /* Theater */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Theater;
 		};
 		E9A0000000000000000000B3 /* YouTubeKit */ = {
 			isa = XCSwiftPackageProductDependency;

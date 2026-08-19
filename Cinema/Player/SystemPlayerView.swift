@@ -76,34 +76,46 @@ struct SystemPlayerView: UIViewControllerRepresentable {
         // Enable Picture in Picture in iOS and tvOS.
         controller.allowsPictureInPicturePlayback = true
 
+        #if !os(tvOS)
+        // The app hosts this controller itself rather than letting AVKit present it, so AVKit
+        // reads the video as inline and won't pop it out on its own. This says the video is the
+        // screen's primary focus, which is what earns the automatic hand-off when the app leaves
+        // the foreground mid-playback.
+        controller.canStartPictureInPictureAutomaticallyFromInline = true
+        #endif
+
         #if os(visionOS) || os(tvOS)
         // Display an Up Next tab in the player UI.
         if let upNextViewController {
             controller.customInfoViewControllers = [upNextViewController]
         }
         #endif
-        
+
         // Return the configured controller object.
         return controller
     }
     
     func updateUIViewController(_ controller: UIViewControllerType, context: Context) {
         #if os(visionOS) || os(tvOS)
+        // Everything the actions depend on has to be read HERE, synchronously: this is the only
+        // scope where SwiftUI's observation registers the reads, and the seat pill appearing at
+        // all depends on this method re-running when the immersive space opens.
+        let customInfoViewControllers = [upNextViewController].compactMap { $0 }
+
+        var actions: [UIAction] = []
+        if let upNextAction, showContextualActions {
+            actions.append(upNextAction)
+        }
+        let contextualActions = actions
         Task { @MainActor in
-            // Rebuild the list of related videos, if necessary.
-            if let upNextViewController {
-                controller.customInfoViewControllers = [upNextViewController]
-            }
-            
-            if let upNextAction, showContextualActions {
-                controller.contextualActions = [upNextAction]
-            } else {
-                controller.contextualActions = []
-            }
+            controller.customInfoViewControllers = customInfoViewControllers
+            controller.contextualActions = contextualActions
         }
         #endif
     }
     
+
+
     // A view controller that presents a list of Up Next videos.
     var upNextViewController: UIViewController? {
         guard let video = model.currentItem else { return nil }
@@ -149,3 +161,4 @@ struct SystemPlayerView: UIViewControllerRepresentable {
 }
 
 #endif
+
