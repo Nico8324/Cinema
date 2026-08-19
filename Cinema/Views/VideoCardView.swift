@@ -45,12 +45,19 @@ enum VideoCardStyle {
 struct VideoCardView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
+    @AppStorage(ArtworkStyle.storageKey) private var artworkStyle: ArtworkStyle = .wide
+
     private var isCompact: Bool {
         horizontalSizeClass == .compact
     }
 
     var video: Video
     var style: VideoCardStyle = .full
+
+    /// The card's width, narrowed in poster mode so a portrait card doesn't tower over its row.
+    private var cardWidth: Double {
+        (isCompact ? Constants.compactVideoCardWidth : Constants.videoCardWidth) * artworkStyle.cardWidthScale
+    }
 
     private var watchProgress: Double? {
         video.isPartiallyWatched ? video.playbackProgress : nil
@@ -59,16 +66,18 @@ struct VideoCardView: View {
     var body: some View {
         switch style {
         case .half:
-            PosterCard(video: video, title: video.displayName, progress: watchProgress)
-                .frame(width: isCompact ? Constants.compactVideoCardWidth : Constants.videoCardWidth)
+            PosterCard(video: video, title: video.displayName, progress: watchProgress,
+                       showsTitle: artworkStyle == .wide)
+                .frame(width: cardWidth)
                 .clipShape(.rect(cornerRadius: Constants.cornerRadius))
                 #if os(iOS) || os(visionOS)
                 .hoverEffect()
                 #endif
 
         case .upNext:
-            PosterCard(video: video, title: video.displayName, progress: watchProgress)
-                .frame(width: Constants.upNextVideoCardWidth)
+            PosterCard(video: video, title: video.displayName, progress: watchProgress,
+                       showsTitle: artworkStyle == .wide)
+                .frame(width: Constants.upNextVideoCardWidth * artworkStyle.cardWidthScale)
                 .clipShape(.rect(cornerRadius: Constants.cornerRadius))
                 #if os(iOS) || os(visionOS)
                 .hoverEffect()
@@ -76,10 +85,15 @@ struct VideoCardView: View {
 
         case .full:
             VStack {
-                PosterImageView(video: video)
-                    .aspectRatio(16 / 9, contentMode: .fit)
+                PosterImageView(video: video, style: artworkStyle)
+                    .aspectRatio(artworkStyle.aspectRatio, contentMode: .fit)
 
-                InfoView(video: video)
+                // A poster is the whole card: its own title, its own typography. The description
+                // block underneath belongs to the wide card, whose artwork says nothing about
+                // which film it is.
+                if artworkStyle == .wide {
+                    InfoView(video: video)
+                }
             }
             #if os(macOS)
             .background(.quaternary)
@@ -89,7 +103,7 @@ struct VideoCardView: View {
             #if os(iOS) || os(visionOS)
             .hoverEffect()
             #endif
-            .frame(width: isCompact ? Constants.compactVideoCardWidth : Constants.videoCardWidth)
+            .frame(width: cardWidth)
             .clipShape(.rect(cornerRadius: Constants.cornerRadius))
 
         case .grid:

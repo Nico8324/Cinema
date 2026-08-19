@@ -17,10 +17,10 @@ import CoreMedia
 /// this enum groups them under a version number so future schema changes migrate deliberately
 /// through `CinemaMigrationPlan` instead of relying on lightweight-migration luck.
 ///
-/// V6 adds `Video.externalPath`, for media the library references where it already sits on disk
-/// instead of copying into its own storage — the Mac's scanned media folder.
-enum CinemaSchemaV6: VersionedSchema {
-    static let versionIdentifier = Schema.Version(6, 0, 0)
+/// V7 adds `Video.hasPoster`, so the library can show portrait posters as well as wide backdrops
+/// — two different pictures of the same film, either of which a person may prefer.
+enum CinemaSchemaV7: VersionedSchema {
+    static let versionIdentifier = Schema.Version(7, 0, 0)
 
     static var models: [any PersistentModel.Type] {
         [Video.self, Genre.self, UpNextItem.self]
@@ -32,11 +32,11 @@ enum CinemaSchemaV6: VersionedSchema {
 enum CinemaMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [CinemaSchemaV1.self, CinemaSchemaV2.self, CinemaSchemaV3.self, CinemaSchemaV4.self,
-         CinemaSchemaV5.self, CinemaSchemaV6.self]
+         CinemaSchemaV5.self, CinemaSchemaV6.self, CinemaSchemaV7.self]
     }
 
     static var stages: [MigrationStage] {
-        [migrateV1toV2, migrateV2toV3, migrateV3toV4, migrateV4toV5, migrateV5toV6]
+        [migrateV1toV2, migrateV2toV3, migrateV3toV4, migrateV4toV5, migrateV5toV6, migrateV6toV7]
     }
 
     /// V1 → V2:
@@ -100,6 +100,92 @@ enum CinemaMigrationPlan: SchemaMigrationPlan {
         fromVersion: CinemaSchemaV5.self,
         toVersion: CinemaSchemaV6.self
     )
+
+    /// V6 → V7: adds the optional `hasPoster` flag — additive only. Existing rows start `false`,
+    /// which correctly says "no poster downloaded yet" rather than "this film has none".
+    static let migrateV6toV7 = MigrationStage.lightweight(
+        fromVersion: CinemaSchemaV6.self,
+        toVersion: CinemaSchemaV7.self
+    )
+}
+
+// MARK: - Legacy schema V6
+
+/// The V6 schema shape, kept only so existing stores can migrate.
+/// Never reference these models outside the migration plan.
+enum CinemaSchemaV6: VersionedSchema {
+    static let versionIdentifier = Schema.Version(6, 0, 0)
+
+    static var models: [any PersistentModel.Type] {
+        [Video.self, Genre.self, UpNextItem.self]
+    }
+
+    @Model
+    final class Video {
+        @Relationship(inverse: \Genre.videos)
+        var genres: [Genre]
+
+        @Relationship(deleteRule: .cascade, inverse: \UpNextItem.video)
+        var upNextItem: UpNextItem?
+
+        var uuid: UUID = UUID()
+        var localFilename: String?
+
+        @Attribute(originalName: "url")
+        var remoteURL: URL?
+
+        var externalPath: String?
+        var name: String
+        var synopsis: String
+        var yearOfRelease: Int
+        var duration: Int
+        var contentRating: String
+        var dateAdded: Date = Date.distantPast
+        var tmdbID: Int?
+        var trailerYouTubeID: String?
+        var showName: String?
+        var seasonNumber: Int?
+        var episodeNumber: Int?
+        var tmdbShowID: Int?
+        var episodeTitle: String?
+        var hasThumbnail: Bool = false
+        var playbackPosition: Double = 0
+        var lastWatchedDate: Date?
+
+        init(name: String) {
+            self.genres = []
+            self.name = name
+            self.synopsis = ""
+            self.yearOfRelease = 2023
+            self.duration = 0
+            self.contentRating = "NR"
+        }
+    }
+
+    @Model
+    final class Genre {
+        @Relationship
+        var videos: [Video]
+
+        var name: String
+
+        init(name: String) {
+            self.videos = []
+            self.name = name
+        }
+    }
+
+    @Model
+    final class UpNextItem {
+        @Relationship(deleteRule: .nullify)
+        var video: Video?
+
+        var createdAt: Date
+
+        init(createdAt: Date = .now) {
+            self.createdAt = createdAt
+        }
+    }
 }
 
 // MARK: - Legacy schema V5

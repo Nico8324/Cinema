@@ -37,6 +37,23 @@ enum MediaStore {
         rootDirectory.appending(path: "Thumbnails", directoryHint: .isDirectory)
     }
 
+    /// The directory holding downloaded portrait posters.
+    ///
+    /// Separate from `thumbnailsDirectory` because the two are different pictures of the same
+    /// film — a 16:9 backdrop and a 2:3 poster — and a person can switch between them at any
+    /// time, so neither may overwrite the other.
+    static var postersDirectory: URL {
+        rootDirectory.appending(path: "Posters", directoryHint: .isDirectory)
+    }
+
+    /// The location of the stored poster for the video with the given identity.
+    static func posterURL(forFilename filename: String) -> URL {
+        postersDirectory
+            .appending(path: filename, directoryHint: .notDirectory)
+            .deletingPathExtension()
+            .appendingPathExtension("jpg")
+    }
+
     /// The file holding the profile photo, stored as a downscaled JPEG.
     static var profileImageURL: URL {
         rootDirectory.appending(path: "profile.jpg", directoryHint: .notDirectory)
@@ -59,6 +76,7 @@ enum MediaStore {
     static func removeMedia(forFilename filename: String) {
         remove(videoURL(forFilename: filename))
         remove(thumbnailURL(forFilename: filename))
+        remove(posterURL(forFilename: filename))
     }
 
     private static func remove(_ url: URL) {

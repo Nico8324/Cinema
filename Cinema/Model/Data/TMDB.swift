@@ -50,6 +50,14 @@ enum TMDB {
             posterPath.map { URL(string: "https://image.tmdb.org/t/p/w342\($0)")! }
         }
 
+        /// The poster at the size TMDB holds it, for artwork the app stores.
+        ///
+        /// Posters are shown at up to a full grid cell and on Retina displays, and this is the
+        /// picture the app keeps rather than re-fetches, so it takes the largest there is.
+        var fullResolutionPosterURL: URL? {
+            posterPath.map { URL(string: "https://image.tmdb.org/t/p/original\($0)")! }
+        }
+
         /// The landscape backdrop, sized for the app's 16:9 poster cards.
         var backdropURL: URL? {
             backdropPath.map { URL(string: "https://image.tmdb.org/t/p/w780\($0)")! }
@@ -265,6 +273,8 @@ enum TMDB {
         let genreNames: [String]
         let certification: String?
         let backdropData: Data?
+        /// The portrait poster, for people who browse their library by poster.
+        let posterData: Data?
         let trailerYouTubeID: String?
     }
 
@@ -360,12 +370,14 @@ enum TMDB {
         async let details = fetchDetails(movieID: movie.id)
         async let certification = fetchCertification(movieID: movie.id)
         async let backdropData = fetchBackdrop(for: movie)
+        async let posterData = fetchImage(at: movie.fullResolutionPosterURL)
         async let trailerID = trailerYouTubeID(forMovieID: movie.id)
         return Match(
             movie: movie,
             genreNames: (try await details).genres.map(\.name),
             certification: try? await certification,
             backdropData: try? await backdropData,
+            posterData: try? await posterData,
             trailerYouTubeID: try? await trailerID
         )
     }
@@ -407,7 +419,13 @@ enum TMDB {
     }
 
     private static func fetchBackdrop(for movie: Movie) async throws -> Data? {
-        guard let url = movie.fullResolutionBackdropURL else { return nil }
+        try await fetchImage(at: movie.fullResolutionBackdropURL)
+    }
+
+    /// Downloads an artwork image, treating "there is no such image" as an empty result rather
+    /// than a failure — plenty of titles have a poster but no backdrop, or the reverse.
+    static func fetchImage(at url: URL?) async throws -> Data? {
+        guard let url else { return nil }
         let (data, _) = try await URLSession.shared.data(from: url)
         return data
     }
@@ -431,6 +449,7 @@ enum TMDB {
 
         applyGenres(named: match.genreNames, to: video, in: context)
         applyArtwork(match.backdropData, to: video)
+        applyPoster(match.posterData, to: video)
 
         Genre.deleteOrphaned(in: context)
         context.saveReportingErrors()
@@ -447,6 +466,28 @@ enum TMDB {
             let genre = Genre(name: name)
             context.insert(genre)
             return genre
+        }
+    }
+
+    /// Stores the film's portrait poster alongside its wide artwork, so switching between the two
+    /// in Settings is instant and offline rather than a re-download.
+    @MainActor
+    static func applyPoster(_ data: Data?, to video: Video) {
+        guard let data, let filename = video.thumbnailFilename else { return }
+        let url = MediaStore.posterURL(forFilename: filename)
+        do {
+            try FileManager.default.createDirectory(at: MediaStore.postersDirectory, withIntermediateDirectories: true)
+            try data.write(to: url)
+            PosterImageCache.invalidate(forFilename: url.lastPathComponent)
+            // Same two-step as `applyArtwork`: both writes inside one SwiftUI transaction would
+            // cancel out, and no view would reload the changed file.
+            video.hasPoster = false
+            Task { @MainActor in
+                video.hasPoster = true
+                video.modelContext?.saveReportingErrors()
+            }
+        } catch {
+            logger.error("Couldn't save the TMDB poster for \(video.name): \(error.localizedDescription)")
         }
     }
 

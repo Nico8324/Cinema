@@ -48,6 +48,12 @@ enum LibraryReconciler {
             removedOrphans += 1
         }
 
+        // Posters are keyed by the same filenames, so the same set decides which are still live.
+        for url in files(in: MediaStore.postersDirectory) where !referencedThumbnails.contains(url.lastPathComponent) {
+            try? fileManager.removeItem(at: url)
+            removedOrphans += 1
+        }
+
         // Entries whose imported file vanished can never play again — remove them
         // (their thumbnails too, via removeLocalFiles).
         //

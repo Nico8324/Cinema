@@ -37,6 +37,12 @@ extension TMDB {
             posterPath.map { URL(string: "https://image.tmdb.org/t/p/w342\($0)")! }
         }
 
+        /// See `TMDB.Movie.fullResolutionPosterURL` — the stored poster is shown at grid size on
+        /// Retina displays, so it's kept at the size TMDB holds it.
+        var fullResolutionPosterURL: URL? {
+            posterPath.map { URL(string: "https://image.tmdb.org/t/p/original\($0)")! }
+        }
+
         /// The landscape backdrop, sized for the app's 16:9 poster cards.
         var backdropURL: URL? {
             backdropPath.map { URL(string: "https://image.tmdb.org/t/p/w780\($0)")! }
@@ -265,6 +271,8 @@ extension TMDB {
         let stills: [SeasonEpisodeKey: Data]
         /// The show's own backdrop, for the show card and header artwork.
         var backdropData: Data? = nil
+        /// The show's poster, shared by every episode the same way the backdrop is.
+        var posterData: Data? = nil
     }
 
     struct SeasonEpisodeKey: Hashable, Sendable {
@@ -347,7 +355,10 @@ extension TMDB {
             backdropData = data
         }
 
-        return ShowMatch(show: show, page: page, episodes: episodes, stills: stills, backdropData: backdropData)
+        let posterData = try? await TMDB.fetchImage(at: show.fullResolutionPosterURL)
+
+        return ShowMatch(show: show, page: page, episodes: episodes, stills: stills,
+                         backdropData: backdropData, posterData: posterData)
     }
 
     /// Applies a show match to all of the show's episodes in the library:
@@ -386,9 +397,24 @@ extension TMDB {
         }
 
         applyShowArtwork(match.backdropData, forShowID: match.show.id)
+        applyShowPoster(match.posterData, forShowID: match.show.id)
 
         Genre.deleteOrphaned(in: context)
         context.saveReportingErrors()
+    }
+
+    /// Saves the show's poster as the shared portrait artwork for all of its episodes.
+    @MainActor
+    static func applyShowPoster(_ data: Data?, forShowID showID: Int) {
+        guard let data else { return }
+        let url = MediaStore.posterURL(forFilename: MediaStore.showArtworkFilename(forShowID: showID))
+        do {
+            try FileManager.default.createDirectory(at: MediaStore.postersDirectory, withIntermediateDirectories: true)
+            try data.write(to: url)
+            PosterImageCache.invalidate(forFilename: url.lastPathComponent)
+        } catch {
+            MediaStore.logger.error("Couldn't save the poster for show \(showID): \(error.localizedDescription)")
+        }
     }
 
     /// Saves the show's backdrop as the shared show-card and header artwork,

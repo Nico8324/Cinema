@@ -22,6 +22,8 @@ struct LibraryView: View {
 
     @Namespace private var namespace
 
+    @AppStorage(ArtworkStyle.storageKey) private var artworkStyle: ArtworkStyle = .wide
+
     /// Which slice of the library the grid shows: movies or shows.
     enum LibraryFilter: String, CaseIterable, Identifiable {
         case movies
@@ -54,8 +56,9 @@ struct LibraryView: View {
     // Adapt the number columns based on platform and size class.
     private var columns: [GridItem] {
         let gridItem = GridItem(.flexible(), spacing: Constants.cardSpacing)
-        let count = horizontalSizeClass == .compact ? Constants.libraryColumnCountCompact : Constants.libraryColumnCount
-        return [GridItem](repeating: gridItem, count: count)
+        let base = horizontalSizeClass == .compact ? Constants.libraryColumnCountCompact : Constants.libraryColumnCount
+        // Posters are narrower than backdrops, so the same grid fits more of them per row.
+        return [GridItem](repeating: gridItem, count: base + artworkStyle.extraGridColumns)
     }
 
     /// One grid cell: a movie, or a whole show collapsed into a single card.
@@ -155,7 +158,8 @@ struct LibraryView: View {
 
                                     case .show(let name, let episodes):
                                         NavigationLink(value: NavigationNode.show(name)) {
-                                            ShowCardView(name: episodes.first?.name ?? name, episodes: episodes)
+                                            ShowCardView(name: episodes.first?.name ?? name, episodes: episodes,
+                                                     style: artworkStyle)
                                         }
                                         .accessibilityLabel(episodes.first?.name ?? name)
                                         .buttonStyle(.plain)
@@ -297,14 +301,15 @@ struct LibraryView: View {
 private struct ShowCardView: View {
     let name: String
     let episodes: [Video]
+    var style: ArtworkStyle = .wide
 
     var body: some View {
         VStack {
             ZStack(alignment: .topTrailing) {
                 if let cover = episodes.first {
                     // The show's own backdrop once matched; episode art before.
-                    ShowArtworkView(cover: cover)
-                        .aspectRatio(16 / 9, contentMode: .fit)
+                    ShowArtworkView(cover: cover, style: style)
+                        .aspectRatio(style.aspectRatio, contentMode: .fit)
                         .cornerRadius(Constants.cornerRadius)
                 }
 

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-08-19
+
+Screen-size calibration from a paired six-seat cross-examination — identical frame captured in every seat of both Apple's Cinema and ours.
+
+### Changed
+- The screen grew to 14 m: measuring the screen's angular width in all six seats of both environments showed every seat uniformly about a fifth small, and one number — Apple's larger screen-to-room ratio — explained all six deviations at once. Seats are recomputed so each row's screen size now lands exactly on the original's; the ceiling and floor keep their calibrated clearance from the bigger screen.
+- The asset pipeline is now reproducible from a single committed script (`Packages/Theater/Tools/setup_and_bake.sh`), ending its dependence on an ephemeral local toolchain.
+
 ## [0.4.1] - 2026-08-19
 
 Seat calibration against captures of all six positions in Apple's Cinema environment, panel visible.

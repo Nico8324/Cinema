@@ -24,7 +24,7 @@ enum TestSupport {
     /// The single in-memory container shared by all tests in this process,
     /// built from the same versioned schema the app uses.
     static let container: ModelContainer = {
-        let schema = Schema(versionedSchema: CinemaSchemaV6.self)
+        let schema = Schema(versionedSchema: CinemaSchemaV7.self)
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         do {
             return try ModelContainer(for: schema, configurations: [config])

@@ -15,6 +15,9 @@ import SwiftUI
 /// its parent proposes, cropping the image to fit.
 struct PosterImageView: View {
     let video: Video
+    /// Which of the video's two pictures to show. Defaults to the wide backdrop, so the surfaces
+    /// that are always wide — the hero, the detail header — don't have to say so.
+    var style: ArtworkStyle = .wide
 
     @State private var poster: Image?
 
@@ -32,14 +35,14 @@ struct PosterImageView: View {
             .clipped()
             // Reload when thumbnail generation completes after import.
             .task(id: taskID) {
-                poster = await PosterImageCache.image(for: video)
+                poster = await PosterImageCache.image(for: video, style: style)
             }
     }
 
     /// Identifies the load task by video and thumbnail state, so a finished
     /// generation or a changed video triggers a reload.
     private var taskID: String {
-        "\(video.uuid)-\(video.hasThumbnail)"
+        "\(video.uuid)-\(video.hasThumbnail)-\(video.hasPoster)-\(style.rawValue)"
     }
 
     private var placeholder: some View {
@@ -62,6 +65,7 @@ struct PosterImageView: View {
 struct ShowArtworkView: View {
     /// The show's first episode — the fallback art and the match marker.
     let cover: Video
+    var style: ArtworkStyle = .wide
 
     @State private var artwork: Image?
 
@@ -76,17 +80,26 @@ struct ShowArtworkView: View {
                     }
                     .clipped()
             } else {
-                PosterImageView(video: cover)
+                PosterImageView(video: cover, style: style)
             }
         }
-        .task(id: cover.tmdbShowID) {
+        .task(id: "\(cover.tmdbShowID ?? 0)-\(style.rawValue)") {
             guard let showID = cover.tmdbShowID else {
                 artwork = nil
                 return
             }
-            artwork = await PosterImageCache.image(
-                forThumbnailFilename: MediaStore.showArtworkFilename(forShowID: showID)
-            )
+            let filename = MediaStore.showArtworkFilename(forShowID: showID)
+            if style == .poster {
+                // A show with no stored poster falls through to its backdrop rather than
+                // showing nothing: a library is always part matched and part not.
+                if let poster = await PosterImageCache.image(at: MediaStore.posterURL(forFilename: filename)) {
+                    artwork = poster
+                } else {
+                    artwork = await PosterImageCache.image(forThumbnailFilename: filename)
+                }
+            } else {
+                artwork = await PosterImageCache.image(forThumbnailFilename: filename)
+            }
         }
     }
 }
@@ -101,7 +114,13 @@ enum PosterImageCache {
         cache.removeObject(forKey: filename as NSString)
     }
 
-    static func image(for video: Video) async -> Image? {
+    /// The video's artwork in the requested shape, falling back to the wide artwork when there's
+    /// no poster — an unmatched video only ever has the frame the app took from the file itself,
+    /// and showing it in the wrong shape beats showing a grey placeholder.
+    static func image(for video: Video, style: ArtworkStyle = .wide) async -> Image? {
+        if style == .poster, let posterURL = video.posterURL, let poster = await image(at: posterURL) {
+            return poster
+        }
         guard let url = video.thumbnailURL else { return nil }
         return await image(at: url)
     }
@@ -112,7 +131,7 @@ enum PosterImageCache {
         await image(at: MediaStore.thumbnailURL(forFilename: filename))
     }
 
-    private static func image(at url: URL) async -> Image? {
+    static func image(at url: URL) async -> Image? {
         let key = url.lastPathComponent as NSString
         if let cached = cache.object(forKey: key) {
             return Image(platformImage: cached)

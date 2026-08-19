@@ -20,6 +20,7 @@ struct SettingsView: View {
     @AppStorage(TMDB.MovieList.storageKey) private var discoveryList: TMDB.MovieList = .nowPlaying
     @AppStorage(TMDB.ShowList.storageKey) private var tvDiscoveryList: TMDB.ShowList = .popular
     @AppStorage(AppearanceSetting.storageKey) private var appearance: AppearanceSetting = .system
+    @AppStorage(ArtworkStyle.storageKey) private var artworkStyle: ArtworkStyle = .wide
 
     @State private var isConfirmingClear = false
     #if os(macOS)
@@ -179,8 +180,13 @@ struct SettingsView: View {
                             Text(setting.displayName).tag(setting)
                         }
                     }
+                    Picker("Artwork", selection: $artworkStyle) {
+                        ForEach(ArtworkStyle.allCases) { style in
+                            Text(style.displayName).tag(style)
+                        }
+                    }
                 } footer: {
-                    Text("Automatic follows your device’s light or dark setting.")
+                    Text("Automatic follows your device’s light or dark setting. Artwork chooses the shape of every card in your library: wide scene images, or portrait posters.")
                 }
 
                 Section {

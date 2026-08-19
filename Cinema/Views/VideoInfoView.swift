@@ -79,12 +79,17 @@ struct PosterCard: View {
     let title: String
     /// Fraction watched (0...1). When provided, overlays a "Continue Watching"-style progress bar on the poster.
     var progress: Double? = nil
+    /// Whether to caption the artwork. A poster already carries the film's title as part of the
+    /// design, so repeating it underneath says the same thing twice.
+    var showsTitle = true
+
+    @AppStorage(ArtworkStyle.storageKey) private var artworkStyle: ArtworkStyle = .wide
 
     var body: some View {
         VStack {
             ZStack(alignment: .bottom) {
-                PosterImageView(video: video)
-                    .aspectRatio(16 / 9, contentMode: .fit)
+                PosterImageView(video: video, style: artworkStyle)
+                    .aspectRatio(artworkStyle.aspectRatio, contentMode: .fit)
                     .cornerRadius(Constants.cornerRadius)
 
                 if let progress {
@@ -93,13 +98,15 @@ struct PosterCard: View {
                 }
             }
 
-            Text(title)
-            #if os(visionOS)
-                .font(.title3)
-            #else
-                .font(.body)
-            #endif
-                .lineLimit(1)
+            if showsTitle {
+                Text(title)
+                #if os(visionOS)
+                    .font(.title3)
+                #else
+                    .font(.body)
+                #endif
+                    .lineLimit(1)
+            }
         }
     }
 }

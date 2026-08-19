@@ -114,6 +114,7 @@ extension CinemaSuite {
                 genreNames: ["Action", "Science Fiction"],
                 certification: "PG-13",
                 backdropData: nil,
+                posterData: nil,
                 trailerYouTubeID: "trailer123"
             )
 

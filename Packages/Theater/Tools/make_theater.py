@@ -12,7 +12,7 @@ from pxr import Usd, UsdGeom, UsdShade, Sdf, Gf
 # Matches TheaterSeat.layout on the Swift side.
 SEATS = {
     "Front":  dict(distance=6.8,  centerY=3.0,  width=13.0, floorY=-0.4, ceilingY=6.2),
-    "Middle": dict(distance=10.2, centerY=2.35, width=11.5, floorY=-0.9, ceilingY=5.8),
+    "Middle": dict(distance=10.2, centerY=2.35, width=14.0, floorY=-1.4, ceilingY=6.3),
     # The back row is the balcony: elevated, looking down at the screen — IMG_0086's pill reads
     # "Dernier rang" over exactly this geometry. Same screen as the middle row, so the same dock
     # width; the viewer is up near the ceiling and the main floor is far below the screen.

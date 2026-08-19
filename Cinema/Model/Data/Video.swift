@@ -66,6 +66,11 @@ final class Video: Identifiable {
     var tmdbShowID: Int?
     /// The episode's own title from TMDB, like "The Engineer".
     var episodeTitle: String?
+    /// Whether a portrait poster has been downloaded for this video.
+    ///
+    /// Separate from `hasThumbnail`: that one is a frame taken from the film, this one is the
+    /// studio's own artwork, and a video can have either, both or neither.
+    var hasPoster: Bool = false
     /// Whether a poster thumbnail has been generated from the video file itself (see `ThumbnailGenerator`).
     /// Generation happens asynchronously after import, so this starts `false` and flips once the file lands on disk.
     var hasThumbnail: Bool = false
@@ -190,6 +195,18 @@ extension Video {
             return "youtube-\(id).jpg"
         }
         return nil
+    }
+
+    /// The downloaded portrait poster's location, for videos that have one.
+    ///
+    /// Episodes don't get their own: a poster is the show's, and every episode of a show shares it,
+    /// the same way they share the show's backdrop.
+    var posterURL: URL? {
+        if let tmdbShowID {
+            return MediaStore.posterURL(forFilename: MediaStore.showArtworkFilename(forShowID: tmdbShowID))
+        }
+        guard hasPoster, let thumbnailFilename else { return nil }
+        return MediaStore.posterURL(forFilename: thumbnailFilename)
     }
 
     /// The generated poster thumbnail's file location, for videos that have one.
