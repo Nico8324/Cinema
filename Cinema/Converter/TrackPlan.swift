@@ -13,6 +13,24 @@ import Foundation
 /// Ported from Immersive Companions, which learned each of these rules from a file that came out
 /// wrong. `Docs/output-spec.md` points 13–24 are what this implements.
 enum TrackPlan {
+    /// Whether to keep only the language the film opens in, dropping every dub, every commentary
+    /// and every subtitle in another language.
+    ///
+    /// This deliberately departs from `Docs/output-spec.md` points 13, 14 and 18, which describe
+    /// what Apple ships: one main track *per language*, commentary alongside, every text subtitle
+    /// carried. Keeping one language is a personal-library optimisation, not Apple parity — about
+    /// 2% on a single film, but tens of gigabytes across a hundred of them, which is the argument
+    /// that actually holds.
+    ///
+    /// Safe as a preference because of an asymmetry: dropping a language is irreversible *in the
+    /// output* and completely recoverable *from the source*, which is never modified. A film can be
+    /// reconverted with its dubs whenever someone wants them back.
+    static let singleLanguageKey = "keepOnlyOriginalLanguage"
+
+    static var keepsOnlyOriginalLanguage: Bool {
+        UserDefaults.standard.object(forKey: singleLanguageKey) as? Bool ?? true
+    }
+
     /// Audio codecs MP4 carries and AVFoundation decodes.
     static let passthroughAudio: Set<String> = ["aac", "ac3", "eac3", "alac", "mp3"]
     /// Subtitle codecs that survive into MP4's text track. Bitmap subtitles have no home there.
@@ -42,7 +60,8 @@ enum TrackPlan {
     /// passes through is anything transcoded, and then it's the richest source that's taken: a
     /// stray stereo track never wins over a surround mix merely for being in a copyable codec.
     static func selectAudio(from media: SourceMedia,
-                            preferredLanguage: String? = nil) -> Selection {
+                            preferredLanguage: String? = nil,
+                            keepingOnlyOneLanguage: Bool = TrackPlan.keepsOnlyOriginalLanguage) -> Selection {
         let passthroughPriority: [String: Int] = ["eac3": 0, "ac3": 1, "aac": 2, "alac": 2, "mp3": 2]
 
         // Grouped in the file's own order, so a language appearing twice isn't reshuffled.
@@ -87,8 +106,9 @@ enum TrackPlan {
         // Which kept main track becomes the default — the one a player opens the film in:
         //   a. the person's own setting, when a kept main track has it;
         //   b. the original language, from the *picture's* own tag;
-        //   c. the source's own default flag, if it survived selection;
-        //   d. the first kept main track.
+        //   c. a track the source itself marks as the original language;
+        //   d. the source's own default flag, if it survived selection;
+        //   e. the first kept main track.
         //
         // A rip's own flag is exactly what a Russian-market disc of an English film gets wrong:
         // the dub sits first and flagged default, and copying that through is what makes a player
@@ -99,6 +119,7 @@ enum TrackPlan {
 
         var winner: SourceMedia.AudioTrack?
         var defaultNote: String?
+        var selectionNotes: [String] = []
 
         if let preferredLanguage, !preferredLanguage.isEmpty,
            let match = mainTracks.first(where: { normalisedLanguage($0.language ?? "") == preferredLanguage }) {
@@ -108,6 +129,15 @@ enum TrackPlan {
                   let match = mainTracks.first(where: { normalisedLanguage($0.language ?? "") == originalLanguage }) {
             winner = match
             defaultNote = String(localized: "\(autonym(for: originalLanguage)) by default — the original language")
+        } else if let match = mainTracks.first(where: \.isOriginalLanguage) {
+            // The picture often carries no language tag at all, and then the rip's own default is
+            // the only thing left — which is how a film with three French tracks and one English
+            // one, marked `original`, would open in French. The flag saying "this is the film's own
+            // language" outranks the flag saying "this is the one this disc opens with".
+            winner = match
+            defaultNote = match.language.map {
+                String(localized: "\(autonym(for: normalisedLanguage($0))) by default — the source marks it the original")
+            }
         } else if let match = mainTracks.first(where: { ($0.disposition["default"] ?? 0) != 0 }) {
             winner = match
         } else {
@@ -116,6 +146,15 @@ enum TrackPlan {
 
         if let winner, let index = orderedKept.firstIndex(where: { $0.index == winner.index }) {
             orderedKept.insert(orderedKept.remove(at: index), at: 0)
+        }
+
+        // One language: the track the film opens in, and nothing else — no dubs, no commentary.
+        if keepingOnlyOneLanguage, let winner {
+            let dropped = orderedKept.count - 1
+            orderedKept = [winner]
+            if dropped > 0 {
+                selectionNotes.append(String(localized: "\(dropped) audio tracks dropped — only the film’s own language is kept"))
+            }
         }
 
         var selection = Selection()
@@ -137,6 +176,7 @@ enum TrackPlan {
             selection.notes.append(String(localized: "\(duplicatesDropped) duplicate audio tracks dropped"))
         }
         if let defaultNote { selection.notes.append(defaultNote) }
+        selection.notes += selectionNotes
         return selection
     }
 
@@ -167,7 +207,15 @@ enum TrackPlan {
         }
         notes += selection.notes
 
-        let text = media.subtitles.filter { textSubtitles.contains($0.codec) }
+        var text = media.subtitles.filter { textSubtitles.contains($0.codec) }
+        if TrackPlan.keepsOnlyOriginalLanguage,
+           let spoken = selection.audio.first(where: \.isDefault)?.track.language.map(normalisedLanguage) {
+            let all = text.count
+            text = text.filter { $0.language.map(normalisedLanguage) == spoken }
+            if all > text.count {
+                notes.append(String(localized: "\(all - text.count) subtitle tracks dropped — only the film’s own language is kept"))
+            }
+        }
 
         // Which subtitle track, if any, starts switched on: a forced track in the language the
         // film will actually open in, since that one carries dialogue a viewer can't otherwise

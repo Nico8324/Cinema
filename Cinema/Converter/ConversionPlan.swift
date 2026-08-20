@@ -84,9 +84,9 @@ struct ConversionPlan: Sendable, Identifiable, Equatable {
         case enhancementLayerLost
         case barsKeptToAvoidAnEncode(extraSeconds: Double)
         case encodedOnlyToCrop
-        /// The file is being re-encoded because it costs far more than Apple's own rung — a
-        /// storage decision, taken knowingly, that costs a generation of picture.
-        case reencodedForStorage(sourceMbps: Double, targetMbps: Double)
+        /// The file costs far more than Apple would spend on this picture, so it is rebuilt to
+        /// Apple's own rung — which is what cloning Apple means for a disc remux.
+        case matchedToApplesRate(sourceMbps: Double, targetMbps: Double)
 
         var id: String { String(describing: self) }
 
@@ -94,7 +94,7 @@ struct ConversionPlan: Sendable, Identifiable, Equatable {
         var isLoss: Bool {
             switch self {
             case .atmosPreserved, .asymmetricLetterbox, .barsKeptToAvoidAnEncode,
-                 .encodedOnlyToCrop, .reencodedForStorage: false
+                 .encodedOnlyToCrop, .matchedToApplesRate: false
             default: true
             }
         }
@@ -112,19 +112,23 @@ struct ConversionPlan: Sendable, Identifiable, Equatable {
         UserDefaults.standard.bool(forKey: cropCostingAnEncodeKey)
     }
 
-    /// Whether to re-encode files that are merely *large*, to save disk.
+    /// Whether to keep the source's own picture instead of matching what Apple ships.
     ///
-    /// Off by default, and the reasoning is the one the spec opens with: a copy is one generation
-    /// from the studio's master — the same parity Apple ships — and re-encoding makes two. Nothing
-    /// about a 74 Mbps remux makes it worse to copy; it makes it 74 GB to keep. So this is a
-    /// storage decision, and the person who owns the disk should be the one taking it.
+    /// Off by default, because matching Apple is what this app is *for*. The 1.35× test is not a
+    /// storage judgement and not a quality one — it asks whether a file is already at or below what
+    /// Apple would spend on this picture. Below it, copying and cloning agree, and the copy wins by
+    /// being a generation closer to the master. Above it they diverge completely: a 74 Mbps disc
+    /// remux in an MP4 wrapper is not the file Apple would have made, whatever else it is.
     ///
-    /// A film is still re-encoded without this when the format leaves no choice: a codec MP4 can't
-    /// carry, or Dolby Vision that a copy would leave unplayable.
-    static let reencodeForStorageKey = "reencodeForStorage"
+    /// The escape hatch exists because the person owns the disk, and because of what is reversible:
+    /// originals are kept, so a film converted to Apple's rung today can be re-copied at disc
+    /// quality tomorrow, and a copy kept today can be matched to Apple later. Neither branch is the
+    /// undoable one while the source survives — which is exactly why the setting can be a
+    /// preference rather than a trap.
+    static let keepsSourceQualityKey = "keepSourceQuality"
 
-    static var reencodesForStorage: Bool {
-        UserDefaults.standard.bool(forKey: reencodeForStorageKey)
+    static var keepsSourceQuality: Bool {
+        UserDefaults.standard.bool(forKey: keepsSourceQualityKey)
     }
 
     /// The plan for one file, measured rather than assumed. The letterbox reading is the slow part —
@@ -158,10 +162,10 @@ struct ConversionPlan: Sendable, Identifiable, Equatable {
                      cropsWhenItCosts: Bool = ConversionPlan.cropsWhenItCostsAnEncode,
                      canRebuildDolbyVision: Bool = ConverterTools.canConvertDolbyVision,
                      forcingEncode: Bool = false,
-                     reencodesForStorage: Bool = ConversionPlan.reencodesForStorage) -> ConversionPlan {
+                     matchesApplesBitrate: Bool = !ConversionPlan.keepsSourceQuality) -> ConversionPlan {
         let route = route(for: source, letterbox: letterbox, cropsWhenItCosts: cropsWhenItCosts,
                           canRebuildDolbyVision: canRebuildDolbyVision, forcingEncode: forcingEncode,
-                          reencodesForStorage: reencodesForStorage)
+                          matchesApplesBitrate: matchesApplesBitrate)
         return ConversionPlan(
             source: source,
             letterbox: letterbox,
@@ -169,14 +173,14 @@ struct ConversionPlan: Sendable, Identifiable, Equatable {
             estimate: ConversionEstimate(source: source, route: route),
             notes: notes(for: source, letterbox: letterbox, route: route,
                          canRebuildDolbyVision: canRebuildDolbyVision, forcedEncode: forcingEncode,
-                         reencodesForStorage: reencodesForStorage)
+                         matchesApplesBitrate: matchesApplesBitrate)
         )
     }
 
     private static func route(for source: SourceMedia, letterbox: Letterbox,
                               cropsWhenItCosts: Bool, canRebuildDolbyVision: Bool,
                               forcingEncode: Bool = false,
-                              reencodesForStorage: Bool = false) -> Route {
+                              matchesApplesBitrate: Bool = true) -> Route {
         let croppedHeight = letterbox.encodedHeight(fullHeight: source.height)
         let hasBars = croppedHeight != source.height
         // H.264 and HEVC are what MP4 carries. Anything else has to be encoded whatever its shape.
@@ -185,22 +189,39 @@ struct ConversionPlan: Sendable, Identifiable, Equatable {
         // The storage decision: worth re-encoding only when the file is spending far more than
         // Apple's own rung for this frame. Never a quality judgement — a copy is always the better
         // picture — and never made at all when the file won't say what it costs.
-        let storageBitrate = reencodesForStorage ? PlaybackTarget.worthwhileBitrate(
+        // The Apple-parity test: is this file already at or below what Apple would spend here?
+        let appleBitrate = matchesApplesBitrate ? PlaybackTarget.worthwhileBitrate(
             width: source.width, height: source.height, frameRate: source.frameRate,
             dynamicRange: source.dynamicRange, sourceCodec: source.videoCodec,
             sourceBitrate: source.videoBitrate) : nil
 
-        let encodesPicture = forcingEncode || !carriable || storageBitrate != nil
+        let encodesPicture = forcingEncode || !carriable || appleBitrate != nil
             || (hasBars && cropsWhenItCosts)
 
         let encode: Encode? = encodesPicture ? {
             let geometry = encodeGeometry(source: source, letterbox: letterbox)
             // The rate is re-derived against the frame that will actually be encoded: a barless
             // 3840×1608 sits on a different rung from the 3840×2160 it was stored in.
-            let bitrate = PlaybackTarget.videoBitrate(
-                width: geometry.width, height: geometry.height, frameRate: source.frameRate,
-                dynamicRange: source.dynamicRange, sourceCodec: source.videoCodec,
-                sourceBitrate: source.videoBitrate ?? 0)
+            let reference = PlaybackTarget.referenceBitrate(
+                width: geometry.width, height: geometry.height,
+                frameRate: source.frameRate, dynamicRange: source.dynamicRange)
+
+            // Two different reasons to rebuild a picture, and only one of them is about rate.
+            //
+            // Parity — or a codec MP4 can't carry — asks for Apple's rung, adjusted for how the two
+            // codecs compare. A rebuild forced by *playability* asks for nothing of the kind: the
+            // film already sits under Apple's rate, it never triggered the parity rule, and taking
+            // a further third off it would be a storage cut nobody asked for on top of the
+            // generation the rebuild already costs. So a forced rebuild keeps the source's own rate,
+            // capped at the rung.
+            let forcedByPlayability = forcingEncode && appleBitrate == nil && carriable
+            let bitrate = forcedByPlayability
+                ? min(reference, source.videoBitrate ?? reference)
+                : PlaybackTarget.videoBitrate(
+                    width: geometry.width, height: geometry.height, frameRate: source.frameRate,
+                    dynamicRange: source.dynamicRange, sourceCodec: source.videoCodec,
+                    sourceBitrate: source.videoBitrate ?? 0)
+
             return Encode(width: geometry.width, height: geometry.height,
                           bitrate: bitrate, cropTop: geometry.top)
         }() : nil
@@ -238,12 +259,12 @@ struct ConversionPlan: Sendable, Identifiable, Equatable {
 
     private static func notes(for source: SourceMedia, letterbox: Letterbox, route: Route,
                               canRebuildDolbyVision: Bool, forcedEncode: Bool = false,
-                              reencodesForStorage: Bool = ConversionPlan.reencodesForStorage) -> [Note] {
+                              matchesApplesBitrate: Bool = !ConversionPlan.keepsSourceQuality) -> [Note] {
         var notes: [Note] = []
         // Why this film is being re-encoded decides which remarks are true of it. An encode forced
         // by unplayable Dolby Vision is not a storage decision and is not "only to crop", and
         // saying either would put a plausible wrong reason in front of the person.
-        let storageBitrate = reencodesForStorage ? PlaybackTarget.worthwhileBitrate(
+        let appleBitrate = matchesApplesBitrate ? PlaybackTarget.worthwhileBitrate(
             width: source.width, height: source.height, frameRate: source.frameRate,
             dynamicRange: source.dynamicRange, sourceCodec: source.videoCodec,
             sourceBitrate: source.videoBitrate) : nil
@@ -251,7 +272,7 @@ struct ConversionPlan: Sendable, Identifiable, Equatable {
         // The letterbox decision, whichever way it went, and what it cost.
         if case .bars(let height, _) = letterbox, height != source.height {
             if route.encode?.isCropping == true {
-                if storageBitrate == nil, !forcedEncode,
+                if appleBitrate == nil, !forcedEncode,
                    ["h264", "hevc"].contains(source.videoCodec) {
                     notes.append(.encodedOnlyToCrop)
                 }
@@ -270,8 +291,8 @@ struct ConversionPlan: Sendable, Identifiable, Equatable {
             notes.append(.asymmetricLetterbox(top: top, bottom: source.height - height - top))
         }
 
-        if storageBitrate != nil, let encode = route.encode, let sourceBitrate = source.videoBitrate {
-            notes.append(.reencodedForStorage(sourceMbps: Double(sourceBitrate) / 1_000_000,
+        if appleBitrate != nil, let encode = route.encode, let sourceBitrate = source.videoBitrate {
+            notes.append(.matchedToApplesRate(sourceMbps: Double(sourceBitrate) / 1_000_000,
                                               targetMbps: Double(encode.bitrate) / 1_000_000))
         }
 

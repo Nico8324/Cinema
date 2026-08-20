@@ -29,7 +29,8 @@ struct SettingsView: View {
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     @AppStorage(ConversionPlan.cropCostingAnEncodeKey) private var cropsWhenItCostsAnEncode = false
-    @AppStorage(ConversionPlan.reencodeForStorageKey) private var reencodesForStorage = false
+    @AppStorage(ConversionPlan.keepsSourceQualityKey) private var keepsSourceQuality = false
+    @AppStorage(TrackPlan.singleLanguageKey) private var keepsOnlyOriginalLanguage = true
     #endif
     @State private var isChoosingMediaFolder = false
     @State private var didCopyInstallCommand = false
@@ -268,7 +269,8 @@ struct SettingsView: View {
                             .disabled(didCopyInstallCommand)
                         }
                     }
-                    Toggle("Re-encode to Save Space", isOn: $reencodesForStorage)
+                    Toggle("Keep Original Quality", isOn: $keepsSourceQuality)
+                    Toggle("One Language Only", isOn: $keepsOnlyOriginalLanguage)
                     Toggle("Crop Black Bars", isOn: $cropsWhenItCostsAnEncode)
                     Button("Show Conversion Queue…") {
                         openWindow(id: ConversionQueueView.windowID)
@@ -282,9 +284,15 @@ struct SettingsView: View {
                         converted. Cinema uses the tools already installed on this Mac rather than shipping \
                         copies of them, and never modifies your originals. Converting is available on Mac only.
                         
-                        Re-encode to Save Space rebuilds films that cost far more than Apple’s own \
-                        streams — a 74 GB disc becomes about 22 GB. It costs a generation of picture and \
-                        hours of work, so it’s off: copies are kept exactly as the studio mastered them.
+                        One Language Only keeps the language a film was made in and drops every dub, \
+                        commentary and foreign subtitle — a couple of per cent on one film, tens of \
+                        gigabytes across a hundred. Your originals keep everything, so a film can be \
+                        converted again with its other languages whenever you want them.
+                        
+                        Cinema aims for the file Apple would have made from the same source: a film \
+                        costing far more than Apple spends is rebuilt to Apple’s own rate, and a 74 GB \
+                        disc becomes about 22 GB. Keep Original Quality copies those films untouched \
+                        instead — the studio’s own picture and its black bars, at several times the size.
                         
                         Crop Black Bars re-encodes widescreen films that could otherwise be copied straight \
                         across. Copying keeps the picture exactly as the studio mastered it and takes minutes; \

@@ -127,14 +127,16 @@ struct ConversionQueueView: View {
                 }
             } header: {
                 if !queue.plans.isEmpty {
-                    Text("\(queue.plans.count) to convert · \(ConversionQueueView.time(queue.totalEstimate)) in total")
+                    Text("\(queue.plans.count) to convert · \(ConversionQueueView.time(queue.totalEstimate)) · \(queue.totalOutputBytes.formatted(.byteCount(style: .file)))")
                 }
             } footer: {
                 if !queue.plans.isEmpty {
                     Text("""
                         Shortest first, so the most of your library becomes watchable soonest. \
                         Estimates come from what conversions on this Mac have actually taken, \
-                        and are re-measured after each one finishes.
+                        and are re-measured after each one finishes. A film costing far more than \
+                        Apple spends on the same picture is rebuilt to Apple’s own rate and loses \
+                        its black bars; one already at or below it is copied untouched.
                         """)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -272,8 +274,8 @@ private struct ConversionPlanRow: View {
             return String(localized: "Its Dolby Vision enhancement layer carries picture detail that Apple’s format can’t hold, so that detail is lost")
         case .copyWouldNotRender:
             return String(localized: "Copying this film’s picture would leave its Dolby Vision unplayable on Apple devices, so it has to be re-encoded")
-        case .reencodedForStorage(let sourceMbps, let targetMbps):
-            return String(localized: "Re-encoded to save space: \(Int(sourceMbps)) Mbps → \(Int(targetMbps)) Mbps. Copying would keep the picture exactly as it is")
+        case .matchedToApplesRate(let sourceMbps, let targetMbps):
+            return String(localized: "Rebuilt to Apple’s own rate: \(Int(sourceMbps)) Mbps → \(Int(targetMbps)) Mbps")
         case .barsKeptToAvoidAnEncode(let extraSeconds):
             return String(localized: "Keeps its black bars — cropping them would mean re-encoding, and \(ConversionQueueView.time(extraSeconds)) longer")
         case .encodedOnlyToCrop:

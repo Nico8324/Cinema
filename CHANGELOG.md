@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-20
+
+The Mac becomes the library's workshop: it converts the films the other platforms can't open, and every choice it makes is shown before it makes it.
+
+### Added
+- **Conversion on the Mac.** Videos that aren't MP4 — the MKV disc remuxes the rest of the library can't play — are converted in place beside the originals, which are never modified. A window (⇧⌘K, or Settings ▸ Conversion) plans the whole media folder first: what each film would become, how long it would take, how large it would be, and what it would *lose*. Shortest first, so the library becomes watchable soonest, and every estimate is re-measured from what this Mac has actually achieved rather than a rule of thumb.
+- **Dolby Vision survives the conversion.** A profile 7 disc rip is rebuilt to the profile 8.1 Apple decodes: the metadata is lifted out, rewritten, and threaded back frame for frame. A film that doesn't need re-encoding keeps the studio's own picture untouched and only has its metadata rewritten — minutes instead of hours.
+- **Letterbox bars are removed the way the studio intended.** The crop comes from what the film *declares* in its own metadata, not from guessing at pixels — and where a film changes shape as it plays, nothing is cropped at all, because a fixed crop would cut the tall scenes permanently.
+- **Every loss is declared before the conversion, not discovered after it**: image-based subtitles MP4 can't carry, audio that has to be re-encoded to play, a Dolby Vision enhancement layer whose detail can't be kept, black bars that would cost a rebuild to remove.
+- **Wide artwork or posters, your choice.** Settings ▸ Artwork switches the whole library between the wide scene images it has always used and portrait posters downloaded from The Movie Database. Posters are stored alongside the wide art, so switching is instant, and anything without a poster falls back to the artwork it has. Stored in schema V7.
+- **One Language Only** (on by default) keeps the language a film was made in and drops the dubs, commentaries and foreign subtitles — a couple of per cent on one film, tens of gigabytes across a hundred. The originals keep everything.
+
+### Changed
+- Conversion aims for the file Apple would have made from the same source: a film costing far more than Apple spends on that picture is rebuilt to Apple's own rate and loses its bars, while a film already at or below it is copied untouched — a copy being one generation from the studio's master rather than two. *Keep Original Quality* in Settings overrules it.
+
+### Fixed
+- Nothing is kept that can't be trusted. A finished conversion is checked for a picture that actually renders, a container a strict reader can parse to the end, Dolby Vision signalling an Apple device will accept, frame-for-frame parity with the source, and the crop it was asked for. Anything that fails is deleted rather than left to be discovered in a film you can't get back.
+
 ### Added
 - Choosing a seat is now part of the room itself: dim seat lights mark every position, the way a real cinema lights its rows — look at one and it lifts under your gaze; tap it and the room glides you there. The seat you occupy stays dark. The floating seat button is gone.
 - The Theater now dials with the Digital Crown like every other environment: it opens fully sealed, and turning the crown brings the real world back in around the room. It had been locked to full immersion since an early draft whose bare-bones room couldn't tolerate passthrough.

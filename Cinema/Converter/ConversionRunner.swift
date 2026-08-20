@@ -70,7 +70,7 @@ enum ConversionRunner {
                     holding: holding, onProgress: onProgress)
             }
 
-            try await finishSubtitleTracks(of: plan, at: destination)
+            try await finishSubtitleTracks(of: plan, sidecars: sidecars, at: destination)
 
             try await Verification.check(
                 destination,
@@ -251,15 +251,30 @@ enum ConversionRunner {
     /// The flag edits are free — GPAC rewrites the track header in place, measured at 0.03 s on a
     /// muxed file. Only the language tags rewrite the file, so they run solely when there is a
     /// same-language collision to resolve.
-    private static func finishSubtitleTracks(of plan: ConversionPlan, at destination: URL) async throws {
+    private static func finishSubtitleTracks(of plan: ConversionPlan, sidecars: [SidecarSubtitle],
+                                             at destination: URL) async throws {
         guard let mp4box = ConverterTools.mp4box else { return }
+
+        // Everything that becomes a subtitle track, in the order the mux writes them: the source's
+        // own text tracks first, then any file found beside the film. Counting only the source's
+        // would silently skip this entire pass the moment someone supplied a sidecar — and skipping
+        // it means shipping GPAC's mangled languages and whichever track it decided to switch on.
         let kept = plan.source.subtitles.filter { TrackPlan.textSubtitles.contains($0.codec) }
+            .map(LanguageTags.Subtitle.init) + sidecars.map(LanguageTags.Subtitle.init)
         guard !kept.isEmpty else { return }
 
         // Read back rather than predicted: a tag or a flag aimed at the wrong track silently
         // rewrites *that* track, and the result passes every check in `Verification`.
         let tracks = try await subtitleTracks(of: destination, using: mp4box)
-        guard tracks.count == kept.count else { return }
+        guard tracks.count == kept.count else {
+            // The one thing not to do here is carry on and guess: if the finished file doesn't hold
+            // the tracks this plan expects, every id below addresses the wrong one, and a language
+            // written onto the wrong track is indistinguishable from a correct file afterwards.
+            throw ConversionError.failed(String(localized: """
+                The converted file has \(tracks.count) subtitle tracks where \(kept.count) were \
+                expected, so their languages couldn’t be set safely.
+                """))
+        }
 
         // The one subtitle that starts on, if any: a forced track in the language the film opens
         // in, since that carries dialogue a viewer has no other way to follow.
@@ -269,11 +284,34 @@ enum ConversionRunner {
             $0.isForced && $0.language.map(TrackPlan.normalisedLanguage) == defaultAudioLanguage
         }
 
-        var arguments = LanguageTags.arguments(forSubtitles: kept, trackIDs: tracks.map(\.id))
+        let variantArguments = LanguageTags.arguments(forSubtitles: kept, trackIDs: tracks.map(\.id))
+        var arguments = variantArguments
+
+        // Every remaining language written again, explicitly, because **GPAC rewrites some of them
+        // on import**: an intermediate carrying `ara bul zho ces` came out of `MP4Box -add` as
+        // `fra fra zho zho` — Arabic and Bulgarian both claiming French, Czech claiming Chinese, in
+        // a delivered film. It is the same defect as the documented `chi` → Norwegian, and moving to
+        // terminological codes does not avoid it, because those are mangled too. `-lang` writes what
+        // it is given, so the language a track ends up with is set here rather than trusted to
+        // survive the mux.
+        let alreadyTagged = Set(zip(variantArguments, variantArguments.dropFirst())
+            .filter { $0.0 == "-lang" }
+            .compactMap { $0.1.split(separator: "=").first.map(String.init) })
+
+        for (offset, track) in tracks.enumerated() where !alreadyTagged.contains("\(track.id)") {
+            guard let language = kept[offset].language.map(TrackPlan.normalisedLanguage) else { continue }
+            arguments += ["-lang", "\(track.id)=\(language)"]
+        }
+
+        // Flags go in the *same* invocation as the languages, and the order matters only in that
+        // both must be in one pass. Measured on a real feature: `-lang` on its own re-enables the
+        // first subtitle track, and a follow-up `-disable` re-mangles the languages, because GPAC
+        // re-applies its broken language mapping on every rewrite. One pass gets both right; two
+        // passes always leave one of them wrong.
         for (offset, track) in tracks.enumerated() {
             if offset == wanted, !track.isEnabled {
                 arguments += ["-enable", "\(track.id)"]
-            } else if offset != wanted, track.isEnabled {
+            } else if offset != wanted {
                 arguments += ["-disable", "\(track.id)"]
             }
         }

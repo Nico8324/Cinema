@@ -25,6 +25,28 @@ import Foundation
 ///   tells a confident lie where an untagged track tells an obvious nothing, so if any track in a
 ///   group can't be read confidently, the whole group is left alone.
 enum LanguageTags {
+    /// A subtitle in the finished file, whatever it came from: a track inside the source, or a text
+    /// file found beside it. Both end up as tracks in the output and both need labelling.
+    struct Subtitle: Sendable, Equatable {
+        let language: String?
+        let title: String?
+        let isForced: Bool
+
+        init(_ track: SourceMedia.SubtitleTrack) {
+            language = track.language
+            title = track.title
+            isForced = track.isForced
+        }
+
+        init(_ sidecar: SidecarSubtitle) {
+            language = sidecar.language
+            // A sidecar's name carries its language and its flags, never a variant description, so
+            // there is nothing here for the variant matcher to read.
+            title = nil
+            isForced = sidecar.isForced
+        }
+    }
+
     /// What a title says about a variant, in the tag that claims exactly that and nothing more.
     ///
     /// Cantonese maps to `yue` rather than `zh-Hant`: Traditional and Simplified are *scripts* and
@@ -58,8 +80,7 @@ enum LanguageTags {
     /// - Parameter trackIDs: the MP4 track ID of each kept subtitle, read back from the finished
     ///   file rather than predicted — a tag applied to the wrong track silently rewrites *that*
     ///   track's language, which no check would catch.
-    static func arguments(forSubtitles subtitles: [SourceMedia.SubtitleTrack],
-                          trackIDs: [Int]) -> [String] {
+    static func arguments(forSubtitles subtitles: [Subtitle], trackIDs: [Int]) -> [String] {
         guard trackIDs.count == subtitles.count else { return [] }
         // Only languages that actually collide are worth touching.
         var byLanguage: [String: [Int]] = [:]

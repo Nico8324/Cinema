@@ -1,6 +1,6 @@
 # Cinema
 
-Cinema is a personal video library app for iOS, iPadOS, and visionOS. Import your own local video files and Cinema builds a real library around them — automatically generated poster art, resumable playback, and editable metadata — all stored on-device.
+Cinema is a personal video library app for iOS, iPadOS, macOS, tvOS, and visionOS. Import your own local video files and Cinema builds a real library around them — automatically generated poster art, resumable playback, and editable metadata — all stored on-device.
 
 ## Features
 
@@ -11,6 +11,7 @@ Cinema is a personal video library app for iOS, iPadOS, and visionOS. Import you
 - **Search.** Find videos by title or genre from the dedicated Search tab.
 - **A real profile.** Set a name and photo from Settings.
 - **Native multiplatform UI.** Tab navigation and window customization built with SwiftUI, tailored to each platform.
+- **Conversion on the Mac.** MKV and other formats Apple's frameworks can't open are converted to MP4 beside the originals, keeping Dolby Vision, cropping letterbox bars where the studio declared them, and verifying the result before keeping it. The queue plans everything first — time, size, and what each film would lose.
 - **visionOS immersive environments.** Play video inside the Studio, or in the Theater — a recreation of the Apple TV app's Cinema with six selectable seats across floor and balcony, where the room's ribbed ceiling and floor are lit by the picture itself.
 
 ## Architecture notes

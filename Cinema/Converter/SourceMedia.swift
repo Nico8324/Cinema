@@ -72,6 +72,12 @@ struct SourceMedia: Sendable, Identifiable, Equatable {
         /// evidence of what a track is — see `TrackPlan.audioDisposition`.
         let disposition: [String: Int]
 
+        /// Whether the source marks this as the film's own language — the track it was shot in.
+        ///
+        /// Rarer than a `language` tag and far more trustworthy than the default flag, which a
+        /// regional rip rewrites to whatever it dubbed.
+        var isOriginalLanguage: Bool { (disposition["original"] ?? 0) != 0 }
+
         /// Whether this is a different programme rather than another mix of the film: a
         /// commentary, or a described/captioned track. Never de-duplicated away.
         var isSecondaryProgramme: Bool {

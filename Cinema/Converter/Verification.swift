@@ -224,7 +224,15 @@ enum Verification {
             .replacingOccurrences(of: ",", with: "")
         // No opinion when the field can't be read — a check that can't see shouldn't condemn.
         guard let compatibility = Int(text) else { return }
-        guard compatibility == 1 else {
+        // Dolby's *Profiles and Levels* (v1.2.92, Table 1) pairs profile 8 with exactly two
+        // cross-compatibility IDs: 1 (CTA HDR10) and 2 (SDR BT.709). Anything else — 0, 3, 4, 5, 6,
+        // 7 — is a combination the format does not define, and a decoder is entitled to refuse it.
+        // Ours produced 8 with 6, which belongs to profile 7, and Apple rendered a black screen.
+        //
+        // Note the ID is *container* metadata: the spec says these "are not carried in a bitstream
+        // and are not available to a decoder". No amount of stream inspection can predict it, which
+        // is why this detects rather than diagnoses.
+        guard compatibility == 1 || compatibility == 2 else {
             throw ConversionError.dolbyVisionNotApplePlayable(compatibility: compatibility)
         }
     }

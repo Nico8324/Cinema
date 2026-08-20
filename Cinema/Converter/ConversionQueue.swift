@@ -73,6 +73,11 @@ final class ConversionQueue {
 
     var totalEstimate: Double { plans.reduce(0) { $0 + $1.estimate.total } }
 
+    /// What the whole queue would put on disk. Shown beside the hours because the setting that
+    /// decides the route trades exactly these two quantities against each other, and a queue that
+    /// displays only one of them reads as though the other were free.
+    var totalOutputBytes: Int64 { plans.reduce(0) { $0 + $1.estimate.outputBytes } }
+
     /// Reads every convertible file in the folder and works out what each one would cost.
     ///
     /// Sequential on purpose. Planning decodes real frames to find the black bars, and running

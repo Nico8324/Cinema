@@ -117,28 +117,37 @@ struct ConversionPlanningTests {
         #expect(plan.route.isReencode == false)
     }
 
-    /// The copy-versus-re-encode line: a storage decision, never a quality one. Below the
-    /// threshold the storage saved doesn't pay for the generation of picture it costs.
-    @Test func onlyAFileSpendingFarOverApplesRateIsReencoded() {
+    /// The Apple-parity line, which is what this app is for: a file costing far more than Apple
+    /// spends on the same picture is rebuilt to Apple's rate; one already at or below it is copied,
+    /// because there the copy and the clone agree and the copy is a generation closer to the master.
+    @Test func aFileAboveApplesRateIsRebuiltAndOneBelowItIsCopied() {
+        let discRemux = media(codec: "hevc", width: 3840, height: 2160, duration: 7000,
+                              bitrate: 74_000_000)
+        // Keeping the source's own picture is available, and is the only way a disc remux is copied.
+        #expect(ConversionPlan.plan(source: discRemux, letterbox: .none,
+                                    canRebuildDolbyVision: false,
+                                    matchesApplesBitrate: false).route == .rewrap)
+
         let frugal = media(codec: "hevc", width: 3840, height: 2160, duration: 7000,
                            bitrate: 20_000_000)
         #expect(ConversionPlan.plan(source: frugal, letterbox: .none,
-                                    canRebuildDolbyVision: false).route == .rewrap)
+                                    canRebuildDolbyVision: false,
+                                    matchesApplesBitrate: true).route == .rewrap)
 
-        let discRemux = media(codec: "hevc", width: 3840, height: 2160, duration: 7000,
-                              bitrate: 74_000_000)
-        let plan = ConversionPlan.plan(source: discRemux, letterbox: .none, canRebuildDolbyVision: false)
+        let plan = ConversionPlan.plan(source: discRemux, letterbox: .none,
+                                       canRebuildDolbyVision: false, matchesApplesBitrate: true)
         #expect(plan.route.isReencode)
         // Never above what the source was spending, never above Apple's rung.
         #expect((plan.route.encode?.bitrate ?? 0) <= 74_000_000)
-        #expect(plan.notes.contains { if case .reencodedForStorage = $0 { true } else { false } })
+        #expect(plan.notes.contains { if case .matchedToApplesRate = $0 { true } else { false } })
     }
 
     /// A file that won't say what its picture costs is left alone rather than re-encoded on a guess.
     @Test func aFileWithNoStatedBitrateIsNeverReencodedForStorage() {
         let unknown = media(codec: "hevc", width: 3840, height: 2160, duration: 7000, bitrate: nil)
         #expect(ConversionPlan.plan(source: unknown, letterbox: .none,
-                                    canRebuildDolbyVision: false).route == .rewrap)
+                                    canRebuildDolbyVision: false,
+                                    matchesApplesBitrate: true).route == .rewrap)
     }
 
     @Test func aCodecMP4CannotCarryIsAlwaysEncoded() {
@@ -209,9 +218,25 @@ struct ConversionPlanningTests {
                                bitrate: 69_000_000)
         let plan = ConversionPlan.plan(source: mustEncode,
                                        letterbox: .bars(height: 1608, top: 276),
-                                       cropsWhenItCosts: false, canRebuildDolbyVision: false)
+                                       cropsWhenItCosts: false, canRebuildDolbyVision: false,
+                                       matchesApplesBitrate: true)
         #expect(plan.route.encode?.height == 1608)
         #expect(plan.route.encode?.cropTop == 276)
+    }
+
+    /// With Apple-matching switched off, only the format itself can force a rebuild.
+    @Test func keepingSourceQualityStillYieldsToWhatTheFormatDemands() {
+        let hugeButCarriable = media(codec: "hevc", width: 3840, height: 2160, duration: 7000,
+                                     bitrate: 90_000_000)
+        #expect(ConversionPlan.plan(source: hugeButCarriable, letterbox: .bars(height: 1608, top: 276),
+                                    cropsWhenItCosts: false, canRebuildDolbyVision: false,
+                                    matchesApplesBitrate: false).route == .rewrap)
+
+        // A codec MP4 can't carry leaves no choice, whatever anyone prefers.
+        let unwrappable = media(codec: "vp9", width: 1920, height: 1080, duration: 600, bitrate: 2_000_000)
+        #expect(ConversionPlan.plan(source: unwrappable, letterbox: .none,
+                                    canRebuildDolbyVision: false,
+                                    matchesApplesBitrate: false).route.isReencode)
     }
 
     // MARK: - Estimates and order
@@ -334,9 +359,12 @@ struct ConversionPlanningTests {
     }
 
     private func plan(named name: String, duration: Double, height: Int, codec: String) -> ConversionPlan {
+        // Size tracks runtime, because a copy's cost is bytes rather than minutes — a longer film
+        // is a bigger file, and that is what the queue is really ordering by.
         let source = media(codec: codec, width: 3840, height: height, duration: duration,
-                           named: name, bitrate: codec == "h264" ? 4_000_000 : 74_000_000)
-        return ConversionPlan.plan(source: source, letterbox: .none)
+                           named: name, fileSize: Int64(duration * 8_000_000),
+                           bitrate: codec == "h264" ? 4_000_000 : 74_000_000)
+        return ConversionPlan.plan(source: source, letterbox: .none, canRebuildDolbyVision: false)
     }
 }
 #endif
@@ -383,6 +411,198 @@ struct CropGeometryTests {
         let geometry = ConversionPlan.encodeGeometry(source: source(), letterbox: .varies)
         #expect(geometry.top == nil)
         #expect(geometry.height == 2160)
+    }
+}
+#endif
+
+#if os(macOS)
+/// Two different reasons to rebuild a picture, and only one of them is about rate.
+@Suite("Rebuild rate")
+struct RebuildRateTests {
+    private func source(bitrate: Int) -> SourceMedia {
+        SourceMedia(url: URL(filePath: "/tmp/f.mkv"), fileSize: 13_000_000_000, duration: 6559,
+                    frameRate: 24, width: 3840, height: 2160, videoCodec: "hevc", bitDepth: 10,
+                    isHDR: true, colorTransfer: "smpte2084",
+                    dolbyVision: .init(profile: 8, compatibilityID: 1), audio: [], subtitles: [],
+                    videoBitrate: bitrate, originalLanguage: "eng", videoStreamIndex: 0)
+    }
+
+    /// A film rebuilt because a copy of it wouldn't play never triggered the rate rule, so it
+    /// keeps its own rate: the rebuild costs a generation, and nothing about playability asks for
+    /// the picture to get smaller as well.
+    @Test func aRebuildForcedByPlayabilityKeepsTheSourcesRate() {
+        let film = source(bitrate: 15_900_000)          // well under Apple's 24 Mbps rung
+        let forced = ConversionPlan.plan(source: film, letterbox: .none, forcingEncode: true)
+        #expect(forced.route.encode?.bitrate == 15_900_000)
+
+        // And is still capped at the rung when the source sits above it.
+        let extravagant = source(bitrate: 70_000_000)
+        let capped = ConversionPlan.plan(source: extravagant, letterbox: .none, forcingEncode: true)
+        #expect((capped.route.encode?.bitrate ?? 0) <= 24_000_000)
+    }
+
+    /// A film rebuilt *for* parity is a different case, and does take the codec adjustment.
+    @Test func aParityRebuildTakesApplesRate() {
+        let discRemux = source(bitrate: 70_000_000)
+        let plan = ConversionPlan.plan(source: discRemux, letterbox: .none,
+                                       canRebuildDolbyVision: false, matchesApplesBitrate: true)
+        #expect(plan.route.isReencode)
+        #expect((plan.route.encode?.bitrate ?? 0) <= 24_000_000)
+    }
+}
+#endif
+
+#if os(macOS)
+/// Which track a film opens in — the question a regional rip gets wrong in both directions.
+@Suite("Default audio")
+struct DefaultAudioTests {
+    private func media(picture language: String?, audio: [SourceMedia.AudioTrack]) -> SourceMedia {
+        SourceMedia(url: URL(filePath: "/tmp/f.mkv"), fileSize: 13_000_000_000, duration: 6559,
+                    frameRate: 24, width: 3840, height: 2160, videoCodec: "hevc", bitDepth: 10,
+                    isHDR: true, colorTransfer: "smpte2084", dolbyVision: nil,
+                    audio: audio, subtitles: [], videoBitrate: 13_000_000,
+                    originalLanguage: language, videoStreamIndex: 0)
+    }
+
+    private func track(_ index: Int, _ language: String, channels: Int = 6,
+                       isDefault: Bool = false, isOriginal: Bool = false) -> SourceMedia.AudioTrack {
+        var disposition: [String: Int] = [:]
+        if isDefault { disposition["default"] = 1 }
+        if isOriginal { disposition["original"] = 1 }
+        return .init(index: index, codec: "eac3", profile: nil, channels: channels,
+                     language: language, title: nil, disposition: disposition)
+    }
+
+    /// War Machine's real shape: three French tracks, one English, the picture carrying no language
+    /// tag, and the rip flagging French as default. The English track is marked `original`, and that
+    /// is the only thing in the file that knows what the film actually is.
+    @Test func theTrackMarkedOriginalWinsOverTheRipsDefaultFlag() {
+        let film = media(picture: nil, audio: [
+            track(1, "fre", isDefault: true), track(2, "fre"), track(3, "fre"),
+            track(4, "eng", isOriginal: true)
+        ])
+        // The winner is the same either way — this is about which track the film opens in, not
+        // about how many survive.
+        #expect(TrackPlan.selectAudio(from: film, keepingOnlyOneLanguage: true)
+            .audio.first(where: \.isDefault)?.track.language == "eng")
+
+        let everyLanguage = TrackPlan.selectAudio(from: film, keepingOnlyOneLanguage: false)
+        #expect(everyLanguage.audio.first(where: \.isDefault)?.track.language == "eng")
+        // Keeping every language, the three French tracks collapse to one and survive alongside.
+        #expect(everyLanguage.audio.filter { $0.track.language == "fre" }.count == 1)
+    }
+
+    /// The picture's own tag still outranks everything, since it describes the film rather than a
+    /// track's paperwork.
+    @Test func thePicturesOwnLanguageTagStillWins() {
+        let film = media(picture: "eng", audio: [
+            track(1, "rus", isDefault: true), track(2, "eng")
+        ])
+        #expect(TrackPlan.selectAudio(from: film).audio.first(where: \.isDefault)?.track.language == "eng")
+    }
+}
+#endif
+
+#if os(macOS)
+/// Labelling the subtitle tracks of a finished file — the pass that decides which languages the
+/// output claims and which track starts switched on.
+@Suite("Subtitle labelling")
+struct SubtitleLabellingTests {
+    private func subtitle(_ language: String?, _ title: String?) -> LanguageTags.Subtitle {
+        LanguageTags.Subtitle(SourceMedia.SubtitleTrack(
+            index: 0, codec: "subrip", language: language, title: title, disposition: [:]))
+    }
+
+    /// A sidecar becomes a track like any other, so it has to be counted like one. Counting only
+    /// the source's own tracks made the whole pass skip itself the moment a sidecar existed.
+    @Test func aSidecarIsOneOfTheTracksToLabel() {
+        let sidecar = LanguageTags.Subtitle(SidecarSubtitle(
+            url: URL(filePath: "/tmp/Film.eng.forced.srt"), language: "eng",
+            isForced: true, isHearingImpaired: false))
+        #expect(sidecar.language == "eng")
+        #expect(sidecar.isForced)
+        // Nothing in a file name describes a script variant, so there's nothing to match on.
+        #expect(sidecar.title == nil)
+    }
+
+    /// Whole group or none: a partly tagged group displays no distinction at all, so a group with
+    /// one unreadable title is left entirely alone.
+    @Test func aGroupIsTaggedOnlyWhenEveryMemberCanBeRead() {
+        let readable = [subtitle("chi", "Simplified"), subtitle("chi", "Traditional")]
+        #expect(LanguageTags.arguments(forSubtitles: readable, trackIDs: [3, 4]).count == 4)
+
+        let partly = [subtitle("chi", "Simplified"), subtitle("chi", "Chinese")]
+        #expect(LanguageTags.arguments(forSubtitles: partly, trackIDs: [3, 4]).isEmpty)
+    }
+
+    /// A language appearing once needs no variant tag — there is nothing for it to be confused with.
+    @Test func aLanguageAppearingOnceIsLeftAlone() {
+        let single = [subtitle("dan", "Danish"), subtitle("chi", "Simplified")]
+        #expect(LanguageTags.arguments(forSubtitles: single, trackIDs: [3, 4]).isEmpty)
+    }
+
+    /// Cantonese is a spoken variety, not a script: `zh-Hant` would assert a script fact from a
+    /// language one, and would collide with a genuine Traditional track.
+    @Test func cantoneseIsTaggedAsItsOwnLanguage() {
+        let group = [subtitle("chi", "Cantonese (Traditional)"), subtitle("chi", "Simplified")]
+        let arguments = LanguageTags.arguments(forSubtitles: group, trackIDs: [3, 4])
+        #expect(arguments.contains("3=yue"))
+        #expect(arguments.contains("4=zh-Hans"))
+    }
+}
+#endif
+
+#if os(macOS)
+/// Keeping one language — a personal-library optimisation that departs from Apple's shape, so it
+/// has to be exact about what it drops and what it keeps.
+@Suite("Single language")
+struct SingleLanguageTests {
+    private func film(audio: [SourceMedia.AudioTrack],
+                      subtitles: [SourceMedia.SubtitleTrack]) -> SourceMedia {
+        SourceMedia(url: URL(filePath: "/tmp/f.mkv"), fileSize: 80_000_000_000, duration: 8418,
+                    frameRate: 24000.0 / 1001, width: 3840, height: 2160, videoCodec: "hevc",
+                    bitDepth: 10, isHDR: true, colorTransfer: "smpte2084", dolbyVision: nil,
+                    audio: audio, subtitles: subtitles, videoBitrate: 75_000_000,
+                    originalLanguage: "eng", videoStreamIndex: 0)
+    }
+
+    private func audio(_ index: Int, _ language: String, channels: Int = 6,
+                       comment: Bool = false) -> SourceMedia.AudioTrack {
+        .init(index: index, codec: "ac3", profile: nil, channels: channels, language: language,
+              title: nil, disposition: comment ? ["comment": 1] : [:])
+    }
+
+    private func subtitle(_ index: Int, _ language: String) -> SourceMedia.SubtitleTrack {
+        .init(index: index, codec: "subrip", language: language, title: nil, disposition: [:])
+    }
+
+    /// Spider-Verse's shape: the film, its commentary, and two dubs. One language keeps the film.
+    @Test func keepsTheFilmsOwnLanguageAndNothingElse() {
+        let source = film(audio: [audio(1, "eng"), audio(2, "eng", channels: 2, comment: true),
+                                  audio(3, "rus"), audio(4, "ukr")], subtitles: [])
+        let selection = TrackPlan.selectAudio(from: source, keepingOnlyOneLanguage: true)
+        #expect(selection.audio.count == 1)
+        #expect(selection.audio.first?.track.language == "eng")
+        #expect(selection.audio.first?.isDefault == true)
+        // What it dropped is said out loud, because nothing in the finished file would reveal it.
+        #expect(selection.notes.contains { $0.contains("dropped") })
+    }
+
+    /// Switched off, the film keeps Apple's shape: one per language, commentary alongside.
+    @Test func leavingItOffKeepsApplesShape() {
+        let source = film(audio: [audio(1, "eng"), audio(2, "eng", channels: 2, comment: true),
+                                  audio(3, "rus"), audio(4, "ukr")], subtitles: [])
+        let selection = TrackPlan.selectAudio(from: source, keepingOnlyOneLanguage: false)
+        #expect(selection.audio.count == 4)
+        #expect(selection.audio.contains { $0.track.isSecondaryProgramme })
+    }
+
+    /// A film with only one language loses nothing and says nothing.
+    @Test func aSingleLanguageFilmIsUnaffected() {
+        let source = film(audio: [audio(1, "eng")], subtitles: [])
+        let selection = TrackPlan.selectAudio(from: source, keepingOnlyOneLanguage: true)
+        #expect(selection.audio.count == 1)
+        #expect(!selection.notes.contains { $0.contains("dropped") })
     }
 }
 #endif
