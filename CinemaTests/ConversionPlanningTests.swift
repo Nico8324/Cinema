@@ -189,7 +189,51 @@ struct ConversionPlanningTests {
             audioTrack(1, "dts", channels: 8, language: "eng", profile: "DTS-HD MA")
         ])
         #expect(ConversionPlan.plan(source: source, letterbox: .none).notes
-            .contains(.audioNeedsTranscode(codec: "dts", channels: 8)))
+            .contains(.audioNeedsTranscode(codec: "dts", channels: 8, outputChannels: 6)))
+    }
+
+    /// The note has to name the channels coming *out*, not just the codec going in.
+    ///
+    /// Serenity shipped this way: a 7.1 DTS-HD MA track re-encoded to 5.1 E-AC-3, two channels
+    /// quietly gone, and a warning that said only "has to be re-encoded to play". The channel count
+    /// was in hand when the note was written and simply wasn't used — the information was present,
+    /// the sentence was lazy. Nothing in the finished file says a channel is missing.
+    @Test func aSevenPointOneSourceDeclaresTheChannelsItLoses() {
+        let source = media(codec: "hevc", width: 3840, height: 2160, duration: 7135, audio: [
+            audioTrack(1, "dts", channels: 8, language: "eng", profile: "DTS-HD MA + DTS:X")
+        ])
+        let note = ConversionPlan.plan(source: source, letterbox: .none).notes
+            .first { if case .audioNeedsTranscode = $0 { true } else { false } }
+        #expect(note == .audioNeedsTranscode(codec: "dts", channels: 8, outputChannels: 6))
+    }
+
+    /// A 5.1 source meets no ceiling, and must not be reported as though it lost something.
+    @Test func aFivePointOneSourceKeepsEveryChannel() {
+        let source = media(codec: "hevc", width: 3840, height: 2160, duration: 7135, audio: [
+            audioTrack(1, "dts", channels: 6, language: "eng", profile: "DTS")
+        ])
+        #expect(ConversionPlan.plan(source: source, letterbox: .none).notes
+            .contains(.audioNeedsTranscode(codec: "dts", channels: 6, outputChannels: 6)))
+    }
+
+    /// The downmix is asked for rather than inherited. ffmpeg would reach the same 5.1 on its own,
+    /// which produces the right file for the wrong reason: a silent default can't be reported.
+    @Test func theDownmixIsStatedInTheArguments() {
+        let source = media(codec: "hevc", width: 3840, height: 2160, duration: 7135, audio: [
+            audioTrack(1, "dts", channels: 8, language: "eng", profile: "DTS-HD MA + DTS:X")
+        ])
+        let arguments = TrackPlan.trackArguments(for: source).arguments
+        #expect(arguments.contains("-ac:a:0"))
+        #expect(arguments.contains("6"))
+    }
+
+    /// A track that is copied is never downmixed, so it must never carry a channel argument.
+    @Test func aCopiedTrackIsNeverDownmixed() {
+        let source = media(codec: "hevc", width: 3840, height: 2160, duration: 7135, audio: [
+            audioTrack(1, "eac3", channels: 8, language: "eng")
+        ])
+        let arguments = TrackPlan.trackArguments(for: source).arguments
+        #expect(!arguments.contains("-ac:a:0"))
     }
 
     /// A file that can be copied is one generation from the studio's master. Re-encoding it to
@@ -286,20 +330,210 @@ struct ConversionPlanningTests {
         #expect(found == ["Waiting.mkv"])
     }
 
+    // MARK: - What a subtitle track is
+
+    /// The flag is absent far more often than it's wrong. *Predator: Badlands* declares its
+    /// forced track only as `title=BTM FORCED`, with `forced=0`, and reading the flag alone
+    /// leaves the film's Yautja dialogue with no track any player would auto-enable.
+    @Test func aForcedTrackIsFoundWhenOnlyItsTitleSaysSo() {
+        let track = subtitleTrack(9, "subrip", language: "eng", title: "BTM FORCED")
+        #expect(TrackPlan.isForced(track))
+    }
+
+    /// A keyword list in one language encodes an assumption about who pressed the disc.
+    /// *Supergirl* is an Italian rip whose **English** SDH track is titled `NON UDENTI`.
+    @Test func anSDHTrackIsFoundWhenItsTitleIsInAnotherLanguage() {
+        let track = subtitleTrack(8, "subrip", language: "eng", title: "NON UDENTI")
+        #expect(TrackPlan.isHearingImpaired(track))
+    }
+
+    /// The signal that survives a language nobody anticipated: a full track carries **zero**
+    /// cues opening with a bracket, an SDH track is full of them.
+    @Test func theCuesIdentifySDHWithoutReadingTheTitle() {
+        let full = SubtitleScan.measure("""
+            1
+            00:00:01,000 --> 00:00:03,000
+            Are you all right?
+
+            2
+            00:00:04,000 --> 00:00:06,000
+            ♪ And I'm still standing ♪
+
+            """, duration: 600)
+        let sdh = SubtitleScan.measure("""
+            1
+            00:00:01,000 --> 00:00:03,000
+            [door creaks]
+
+            2
+            00:00:04,000 --> 00:00:06,000
+            Are you all right?
+
+            """, duration: 600)
+        #expect(full.bracketed == 0)
+        #expect(!full.readsAsSDH)
+        #expect(sdh.bracketed == 1)
+        #expect(sdh.readsAsSDH)
+
+        // Decided by the cues even when nothing else says so — an untitled, unflagged track.
+        let anonymous = subtitleTrack(3, "subrip", language: "kor")
+        #expect(TrackPlan.isHearingImpaired(anonymous, content: sdh))
+        #expect(!TrackPlan.isHearingImpaired(anonymous, content: full))
+    }
+
+    /// Song lyrics are dialogue and belong in a full track. *Across the Spider-Verse*'s American
+    /// track carries 346 music-note cues; a rule counting any bracketing symbol reads that full
+    /// track as 13% marked and misclassifies it.
+    @Test func musicNotesAreNotSoundDescriptions() {
+        let lyrics = SubtitleScan.measure("""
+            1
+            00:00:01,000 --> 00:00:03,000
+            ♪ Ooh, ooh, ooh ♪
+
+            """, duration: 600)
+        #expect(lyrics.bracketed == 0)
+        #expect(!lyrics.readsAsSDH)
+    }
+
+    /// Counted anywhere in the cue, the same film's "English full" track scores 1 —
+    /// `It is I, the Armadillo-- [grunts] Oh!` — and the rule stops being absolute. Anchored to
+    /// the line start it is zero, which is the difference between a rule that is true and one
+    /// that merely has a comfortable margin.
+    @Test func anInlineSoundDescriptionDoesNotMakeATrackSDH() {
+        let full = SubtitleScan.measure("""
+            1
+            00:00:01,000 --> 00:00:03,000
+            It is I, the Armadillo-- [grunts] Oh!
+
+            """, duration: 600)
+        #expect(full.cues == 1)
+        #expect(full.bracketed == 0)
+        #expect(!full.readsAsSDH)
+    }
+
+    /// A bare `hasPrefix("[")` misses the conventions a real SDH track actually uses: a dialogue
+    /// dash before a speaker label, or an ASS position override before a sound description. 108 of
+    /// *Across the Spider-Verse*'s British SDH cues open that way, and a track using only that
+    /// convention would read as an ordinary subtitle.
+    @Test func aDescriptionIsFoundBehindADashOrAPositionOverride() {
+        let sdh = SubtitleScan.measure("""
+            1
+            00:00:01,000 --> 00:00:03,000
+            - [woman] Hey, Gwen.
+
+            2
+            00:00:04,000 --> 00:00:06,000
+            {\\an8}[music turns dramatic]
+
+            3
+            00:00:07,000 --> 00:00:09,000
+            <i>[footsteps receding]</i>
+
+            """, duration: 600)
+        #expect(sdh.bracketed == 3)
+        #expect(sdh.readsAsSDH)
+    }
+
+    /// And the check that stripping those prefixes risks: a full track writing a dialogue dash
+    /// before ordinary speech must still score zero, or the separation the rule rests on is gone.
+    @Test func aDialogueDashAloneIsNotADescription() {
+        let full = SubtitleScan.measure("""
+            1
+            00:00:01,000 --> 00:00:03,000
+            - Are you all right?
+
+            2
+            00:00:04,000 --> 00:00:06,000
+            {\\an8}Meanwhile, in Brooklyn
+
+            """, duration: 600)
+        #expect(full.bracketed == 0)
+        #expect(!full.readsAsSDH)
+    }
+
+    /// A release picks one bracket style and uses it throughout. *Predator: Badlands* writes its
+    /// entire SDH track in parentheses — 707 cues, not one square bracket — so a `[`-only rule
+    /// reads it as ordinary subtitles. Found by running the rule over real files; no amount of
+    /// re-reading it would have produced `(WIND WHOOSHING)`.
+    @Test func parenthesesAreSoundDescriptionsToo() {
+        let sdh = SubtitleScan.measure("""
+            1
+            00:00:01,000 --> 00:00:03,000
+            (WIND WHOOSHING)
+
+            2
+            00:00:04,000 --> 00:00:06,000
+            (CHANTING IN YAUTJA)
+
+            """, duration: 600)
+        #expect(sdh.bracketed == 2)
+        #expect(sdh.readsAsSDH)
+    }
+
+    /// A forced track says very little: 1–2 cues a minute against 12–22 for a full one. This is
+    /// the last resort, for a source offering neither a flag nor a title in a language we know.
+    @Test func cueRateIdentifiesAForcedTrack() {
+        let sparse = SubtitleContent(cues: 103, bracketed: 0, duration: 5940)
+        let full = SubtitleContent(cues: 1491, bracketed: 0, duration: 5940)
+        #expect(sparse.readsAsForced)
+        #expect(!full.readsAsForced)
+        #expect(TrackPlan.isForced(subtitleTrack(5, "subrip", language: "eng"), content: sparse))
+    }
+
+    /// Density cannot answer the SDH question, which is why the cue *text* does. *Supergirl* has
+    /// no full English track to compare against — only a forced one and an SDH one — so the file
+    /// that motivated the rule is the file that defeats a rate-based version of it.
+    @Test func cueRateCannotIdentifySDH() {
+        let sdh = SubtitleContent(cues: 1491, bracketed: 610, duration: 5940)
+        #expect(!sdh.readsAsForced)
+        #expect(sdh.readsAsSDH)
+    }
+
+    /// A title-only forced track has to reach the finished file as `forced`, or none of this
+    /// mattered: that flag is what a player reads to auto-enable it.
+    @Test func aTitleOnlyForcedTrackIsWrittenForcedAndSwitchedOn() {
+        let source = media(codec: "hevc", width: 3840, height: 2160, duration: 6448,
+                           audio: [audioTrack(1, "eac3", channels: 6, language: "eng")],
+                           subtitles: [subtitleTrack(9, "subrip", language: "eng", title: "BTM FORCED"),
+                                       subtitleTrack(10, "subrip", language: "eng", title: "BTM")])
+        let arguments = TrackPlan.trackArguments(for: source).arguments
+        #expect(arguments.contains("default+forced"))
+    }
+
     // MARK: - Calibration
 
     /// One job on battery, or against a busy disk, is a real measurement of an unusual day. It
     /// should move the estimates, not replace them.
     @Test func calibrationMovesTowardsAMeasurementWithoutJumpingToIt() {
-        let start = ConversionCalibration.measured
-        let blended = start.blending(pixelsPerSecond: start.pixelsPerSecond / 2)
-        #expect(blended.pixelsPerSecond < start.pixelsPerSecond)
-        #expect(blended.pixelsPerSecond > start.pixelsPerSecond / 2)
-        #expect(blended.samples == start.samples + 1)
+        let measured = ConversionCalibration.measured.blending(pixelsPerSecond: 80_000_000)
+        let blended = measured.blending(pixelsPerSecond: measured.pixelsPerSecond / 2)
+        #expect(blended.pixelsPerSecond < measured.pixelsPerSecond)
+        #expect(blended.pixelsPerSecond > measured.pixelsPerSecond / 2)
+        #expect(blended.encodeSamples == measured.encodeSamples + 1)
 
         // A rewrap measures nothing about encoding speed, and must not be allowed to claim it does.
-        let afterRewrap = start.blending(rewrapSecondsPerGigabyte: 30)
-        #expect(afterRewrap.pixelsPerSecond == start.pixelsPerSecond)
+        let afterRewrap = measured.blending(rewrapSecondsPerGigabyte: 30)
+        #expect(afterRewrap.pixelsPerSecond == measured.pixelsPerSecond)
+        #expect(afterRewrap.encodeSamples == measured.encodeSamples)
+    }
+
+    /// The shipped rates are a guess, and a guess that survives contact with measurement isn't
+    /// calibration. Seeded as a sample it kept half the weight of the first real job — which is how
+    /// four films came in at 12h57m against a prediction of 22h10m, every one wrong the same way.
+    @Test func theFirstRealMeasurementReplacesTheSeedRatherThanAveragingWithIt() {
+        let seed = ConversionCalibration.measured
+        let real = seed.blending(pixelsPerSecond: 120_000_000)
+        #expect(real.pixelsPerSecond == 120_000_000)
+        #expect(real.encodeSamples == 1)
+    }
+
+    /// Each rate keeps its own count, so a rewrap can't age the encode rate out of its replacement.
+    /// One shared counter meant a single rewrap left every later encode averaging against a guess.
+    @Test func aRewrapDoesNotSpendTheEncodeRatesFirstMeasurement() {
+        let afterRewrap = ConversionCalibration.measured.blending(rewrapSecondsPerGigabyte: 30)
+        #expect(afterRewrap.rewrapSecondsPerGigabyte == 30)
+        let thenAnEncode = afterRewrap.blending(pixelsPerSecond: 120_000_000)
+        #expect(thenAnEncode.pixelsPerSecond == 120_000_000)
     }
 
     // MARK: - Helpers
@@ -603,6 +837,48 @@ struct SingleLanguageTests {
         let selection = TrackPlan.selectAudio(from: source, keepingOnlyOneLanguage: true)
         #expect(selection.audio.count == 1)
         #expect(!selection.notes.contains { $0.contains("dropped") })
+    }
+}
+#endif
+
+#if os(macOS)
+/// The mux and the pass that labels the finished file must agree on which subtitles survive.
+/// They didn't, and the disagreement only surfaced after two and a half hours of encoding.
+@Suite("Kept subtitles")
+struct KeptSubtitleTests {
+    private func film() -> SourceMedia {
+        SourceMedia(url: URL(filePath: "/tmp/f.mkv"), fileSize: 13_000_000_000, duration: 6559,
+                    frameRate: 24, width: 3840, height: 2160, videoCodec: "hevc", bitDepth: 10,
+                    isHDR: true, colorTransfer: "smpte2084", dolbyVision: nil,
+                    audio: [.init(index: 1, codec: "eac3", profile: nil, channels: 6,
+                                  language: "eng", title: nil, disposition: ["default": 1])],
+                    subtitles: [
+                        .init(index: 2, codec: "subrip", language: "eng", title: nil, disposition: [:]),
+                        .init(index: 3, codec: "subrip", language: "fre", title: nil, disposition: [:]),
+                        .init(index: 4, codec: "subrip", language: "fre", title: nil, disposition: [:]),
+                        .init(index: 5, codec: "hdmv_pgs_subtitle", language: "eng", title: nil, disposition: [:])
+                    ],
+                    videoBitrate: 13_000_000, originalLanguage: "eng", videoStreamIndex: 0)
+    }
+
+    /// War Machine's real shape: six subtitle tracks in the source, one English text track kept.
+    /// The labelling pass must expect exactly what the mux wrote — no more, no fewer.
+    @Test func theKeptListMatchesWhatTheMuxWrites() {
+        let kept = TrackPlan.keptSubtitles(for: film(), spokenLanguage: "eng")
+        #expect(kept.count == 1)
+        #expect(kept.first?.language == "eng")
+        // The bitmap track was never a candidate: MP4 can't carry it.
+        #expect(!kept.contains { $0.codec == "hdmv_pgs_subtitle" })
+    }
+
+    /// With no language to keep, every text track survives — and the count still has to match.
+    @Test func withoutASpokenLanguageEveryTextTrackIsKept() {
+        #expect(TrackPlan.keptSubtitles(for: film(), spokenLanguage: nil).count == 3)
+    }
+
+    /// The language the film opens in is the one the rule keeps.
+    @Test func theSpokenLanguageIsTheOneTheFilmOpensIn() {
+        #expect(TrackPlan.spokenLanguage(of: film()) == "eng")
     }
 }
 #endif

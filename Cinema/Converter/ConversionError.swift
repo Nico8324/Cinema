@@ -36,6 +36,8 @@ enum ConversionError: LocalizedError {
     case dolbyVisionNotApplePlayable(compatibility: Int)
     /// Dolby Vision profile 5, whose base layer can't be shown correctly without the metadata.
     case dolbyVisionProfile5
+    case subtitleTrackMissing
+    case accessibilityMarkingFailed(underlying: Int?)
     case failed(String)
 
     var errorDescription: String? {
@@ -91,6 +93,10 @@ enum ConversionError: LocalizedError {
                 which Apple devices show as a black screen. The file was deleted rather than added \
                 to your library.
                 """)
+        case .subtitleTrackMissing:
+            String(localized: "A subtitle track named for accessibility marking isn’t in the finished file.")
+        case .accessibilityMarkingFailed(let underlying):
+            String(localized: "The SDH tracks couldn’t be marked as accessible\(underlying.map { " (\($0))" } ?? "").")
         case .dolbyVisionProfile5:
             String(localized: """
                 This film uses Dolby Vision profile 5, whose picture can only be shown correctly \

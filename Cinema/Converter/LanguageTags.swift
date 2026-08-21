@@ -31,11 +31,18 @@ enum LanguageTags {
         let language: String?
         let title: String?
         let isForced: Bool
+        /// Whether this one carries sound descriptions, so the accessibility pass can find it.
+        let isHearingImpaired: Bool
+        /// The stream index it came from inside the source, or `nil` for a sidecar — which is what
+        /// lets a track in the finished file be matched back to the cues that were read from it.
+        let sourceIndex: Int?
 
         init(_ track: SourceMedia.SubtitleTrack) {
             language = track.language
             title = track.title
             isForced = track.isForced
+            isHearingImpaired = track.isHearingImpaired
+            sourceIndex = track.index
         }
 
         init(_ sidecar: SidecarSubtitle) {
@@ -44,6 +51,8 @@ enum LanguageTags {
             // there is nothing here for the variant matcher to read.
             title = nil
             isForced = sidecar.isForced
+            isHearingImpaired = sidecar.isHearingImpaired
+            sourceIndex = nil
         }
     }
 

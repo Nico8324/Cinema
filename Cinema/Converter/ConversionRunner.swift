@@ -6,6 +6,7 @@ Running one conversion: the tools, in order, and the checks that decide whether 
 */
 
 #if os(macOS)
+import CoreMedia
 import Foundation
 
 /// Converts one file, following its plan.
@@ -52,6 +53,16 @@ enum ConversionRunner {
         try checkSpace(for: plan, writingTo: destination)
 
         let sidecars = SidecarSubtitle.discover(for: source)
+
+        // What the kept subtitle tracks actually contain, read before the mux because the answer
+        // decides which one is written `forced` and which `hearing_impaired` — and those flags are
+        // what a player uses to auto-enable a track and to name it. Only the kept tracks are read:
+        // scanning all 33 of a disc remux's would spend a minute on tracks nobody will ever see.
+        let spokenLanguage = TrackPlan.spokenLanguage(of: plan.source,
+                                                      preferredLanguage: preferredAudioLanguage)
+        let cueContent = await SubtitleScan.scan(
+            TrackPlan.keptSubtitles(for: plan.source, spokenLanguage: spokenLanguage), of: plan.source)
+
         let start = ContinuousClock.now
         var encodeFinished: ContinuousClock.Instant?
 
@@ -60,17 +71,27 @@ enum ConversionRunner {
             case .rewrap, .reencode:
                 try await runPlain(plan, sidecars: sidecars, from: source, to: destination,
                                    preferredAudioLanguage: preferredAudioLanguage,
+                                   cueContent: cueContent,
                                    holding: holding, onProgress: onProgress)
                 encodeFinished = .now
 
             case .rebuildDolbyVision(let encode):
                 encodeFinished = try await runDolbyVision(
                     plan, encode: encode, sidecars: sidecars, from: source, to: destination,
-                    preferredAudioLanguage: preferredAudioLanguage,
+                    preferredAudioLanguage: preferredAudioLanguage, cueContent: cueContent,
                     holding: holding, onProgress: onProgress)
             }
 
-            try await finishSubtitleTracks(of: plan, sidecars: sidecars, at: destination)
+            // Everything that rewrites the finished file in place happens here, and **before**
+            // verification, deliberately. The GPAC language/flag pass and the AVFoundation
+            // accessibility pass both mutate a file that already exists, so a failure in either
+            // damages the artefact rather than merely failing to produce one. Running them ahead
+            // of `Verification.check` means the container parse, the render check and frame parity
+            // all see the *final* bytes — and a mutation that breaks the file is caught and the
+            // file deleted, instead of shipping a broken container that still plays.
+            try await finishSubtitleTracks(of: plan, sidecars: sidecars,
+                                           preferredAudioLanguage: preferredAudioLanguage,
+                                           cueContent: cueContent, at: destination)
 
             try await Verification.check(
                 destination,
@@ -102,6 +123,7 @@ enum ConversionRunner {
     private static func runPlain(_ plan: ConversionPlan, sidecars: [SidecarSubtitle],
                                  from source: URL, to destination: URL,
                                  preferredAudioLanguage: String?,
+                                 cueContent: [Int: SubtitleContent],
                                  holding: @escaping @MainActor (Process) -> Void,
                                  onProgress: @escaping @MainActor (Double) -> Void) async throws {
         guard let ffmpeg = ConverterTools.ffmpeg else {
@@ -143,7 +165,8 @@ enum ConversionRunner {
         }
 
         arguments += TrackPlan.trackArguments(for: media, sidecars: sidecars,
-                                              preferredLanguage: preferredAudioLanguage).arguments
+                                              preferredLanguage: preferredAudioLanguage,
+                                              content: cueContent).arguments
         arguments += ["-progress", "pipe:1", "-nostats", "-loglevel", "error",
                       destination.path(percentEncoded: false)]
 
@@ -158,6 +181,7 @@ enum ConversionRunner {
     private static func runDolbyVision(_ plan: ConversionPlan, encode: ConversionPlan.Encode?,
                                        sidecars: [SidecarSubtitle], from source: URL, to destination: URL,
                                        preferredAudioLanguage: String?,
+                                       cueContent: [Int: SubtitleContent],
                                        holding: @escaping @MainActor (Process) -> Void,
                                        onProgress: @escaping @MainActor (Double) -> Void)
     async throws -> ContinuousClock.Instant {
@@ -252,6 +276,8 @@ enum ConversionRunner {
     /// muxed file. Only the language tags rewrite the file, so they run solely when there is a
     /// same-language collision to resolve.
     private static func finishSubtitleTracks(of plan: ConversionPlan, sidecars: [SidecarSubtitle],
+                                             preferredAudioLanguage: String?,
+                                             cueContent: [Int: SubtitleContent],
                                              at destination: URL) async throws {
         guard let mp4box = ConverterTools.mp4box else { return }
 
@@ -259,7 +285,8 @@ enum ConversionRunner {
         // own text tracks first, then any file found beside the film. Counting only the source's
         // would silently skip this entire pass the moment someone supplied a sidecar — and skipping
         // it means shipping GPAC's mangled languages and whichever track it decided to switch on.
-        let kept = plan.source.subtitles.filter { TrackPlan.textSubtitles.contains($0.codec) }
+        let spoken = TrackPlan.spokenLanguage(of: plan.source, preferredLanguage: preferredAudioLanguage)
+        let kept = TrackPlan.keptSubtitles(for: plan.source, spokenLanguage: spoken)
             .map(LanguageTags.Subtitle.init) + sidecars.map(LanguageTags.Subtitle.init)
         guard !kept.isEmpty else { return }
 
@@ -326,6 +353,37 @@ enum ConversionRunner {
         _ = try await Process.output(of: mp4box,
                                      arguments: ["-quiet"] + arguments
                                      + [destination.path(percentEncoded: false)])
+
+        try await markAccessibleSubtitles(kept: kept, tracks: tracks, cueContent: cueContent,
+                                          source: plan.source, at: destination)
+    }
+
+    /// Marks the SDH tracks so an Apple player can tell them apart, and names them for the viewer.
+    ///
+    /// **Last, deliberately.** It regenerates the `moov`, so anything GPAC still has to write must
+    /// already be written — and a forced track flagged by `MP4Box -kind` beforehand does survive
+    /// this pass, which is the interaction that had to be checked rather than assumed.
+    ///
+    /// Failure here does not fail the conversion. Every other step in this file guards something
+    /// the format requires; this one adds a label. A film that arrives with two identical "English"
+    /// entries is worse than one that doesn't, and it is not worth destroying hours of encoding
+    /// over — so the error is carried into the notes rather than thrown.
+    private static func markAccessibleSubtitles(kept: [LanguageTags.Subtitle],
+                                                tracks: [(id: Int, isEnabled: Bool)],
+                                                cueContent: [Int: SubtitleContent],
+                                                source: SourceMedia, at destination: URL) async throws {
+        let byIndex = Dictionary(uniqueKeysWithValues: source.subtitles.map { ($0.index, $0) })
+        let ids: [CMPersistentTrackID] = zip(kept, tracks).compactMap { subtitle, track in
+            // A sidecar says what it is in its filename and was never scanned, so it is taken at
+            // its word; a track from inside the source is decided by flag, title, then its cues.
+            guard let index = subtitle.sourceIndex, let original = byIndex[index] else {
+                return subtitle.isHearingImpaired ? CMPersistentTrackID(track.id) : nil
+            }
+            guard TrackPlan.isHearingImpaired(original, content: cueContent[index]) else { return nil }
+            return CMPersistentTrackID(track.id)
+        }
+        guard !ids.isEmpty else { return }
+        _ = try? await AccessibilityMarking.mark(trackIDs: ids, in: destination)
     }
 
     /// The subtitle tracks of a muxed file: their MP4 track IDs and whether each starts enabled.
