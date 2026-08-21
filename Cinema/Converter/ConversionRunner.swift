@@ -57,7 +57,15 @@ enum ConversionRunner {
             throw ConversionError.dolbyVisionProfile5
         }
         let source = plan.source.url
-        let destination = unusedOutputURL(forConverting: source)
+        let finalDestination = try unusedOutputURL(forConverting: source)
+        // All work happens at a hidden in-progress name and only a fully verified file is
+        // renamed into place — so a quit, crash or power loss mid-encode can never leave a
+        // truncated file at a name the scanner would import or the queue would count as "already
+        // converted". Hidden (dot-prefixed) because every enumeration in the converter and the
+        // scanner skips hidden files: in-progress work is invisible to all of them by the same
+        // rule that hides it from Finder.
+        let destination = inProgressURL(for: finalDestination)
+        try? FileManager.default.removeItem(at: destination)
         try checkSpace(for: plan, writingTo: destination)
 
         let sidecars = SidecarSubtitle.discover(for: source)
@@ -115,14 +123,47 @@ enum ConversionRunner {
             throw error
         }
 
+        // The rename is the very last step, after the subtitle passes *and* verification — a
+        // file at its final name is, by construction, a verified one. Re-derived rather than
+        // reused in case something claimed the name during the hours this job ran.
+        let output: URL
+        do {
+            let target = FileManager.default.fileExists(atPath: finalDestination.path(percentEncoded: false))
+                ? try unusedOutputURL(forConverting: source)
+                : finalDestination
+            try FileManager.default.moveItem(at: destination, to: target)
+            output = target
+        } catch {
+            try? FileManager.default.removeItem(at: destination)
+            throw error
+        }
+
         let end = ContinuousClock.now
         let encodeSeconds = (encodeFinished ?? end) - start
         return Outcome(
-            output: destination,
+            output: output,
             encodeSeconds: plan.route.isReencode ? encodeSeconds.seconds : 0,
             finishSeconds: plan.route.isReencode ? (end - (encodeFinished ?? end)).seconds
                                                 : (end - start).seconds,
-            outputBytes: destination.currentFileSize ?? 0)
+            outputBytes: output.currentFileSize ?? 0)
+    }
+
+    /// Where a conversion is written while it runs: hidden, beside its final name.
+    static func inProgressURL(for finalDestination: URL) -> URL {
+        finalDestination.deletingLastPathComponent()
+            .appending(path: "." + finalDestination.deletingPathExtension().lastPathComponent
+                       + ".converting.mp4")
+    }
+
+    /// Sweeps in-progress files a previous run abandoned by quitting or crashing mid-encode.
+    /// Only ever called while nothing is converting — a live in-progress file is being written.
+    static func removeAbandonedInProgressFiles(under folder: URL) {
+        guard let enumerator = FileManager.default.enumerator(
+            at: folder, includingPropertiesForKeys: [.isRegularFileKey], options: []) else { return }
+        for case let url as URL in enumerator
+        where url.lastPathComponent.hasPrefix(".") && url.lastPathComponent.hasSuffix(".converting.mp4") {
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     // MARK: - The two routes
@@ -375,7 +416,7 @@ enum ConversionRunner {
     /// Failure here does not fail the conversion. Every other step in this file guards something
     /// the format requires; this one adds a label. A film that arrives with two identical "English"
     /// entries is worse than one that doesn't, and it is not worth destroying hours of encoding
-    /// over — so the error is carried into the notes rather than thrown.
+    /// over — so the error is logged rather than thrown.
     private static func markAccessibleSubtitles(kept: [LanguageTags.Subtitle],
                                                 tracks: [(id: Int, isEnabled: Bool)],
                                                 cueContent: [Int: SubtitleContent],
@@ -391,7 +432,13 @@ enum ConversionRunner {
             return CMPersistentTrackID(track.id)
         }
         guard !ids.isEmpty else { return }
-        _ = try? await AccessibilityMarking.mark(trackIDs: ids, in: destination)
+        do {
+            _ = try await AccessibilityMarking.mark(trackIDs: ids, in: destination)
+        } catch {
+            // Non-fatal by design, but never silent: a swallowed error here meant nobody could
+            // tell a marked library from one where the pass had been failing for months.
+            ConversionQueue.logger.error("Couldn't mark SDH subtitles in \(destination.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     /// The subtitle tracks of a muxed file: their MP4 track IDs and whether each starts enabled.
@@ -441,7 +488,7 @@ enum ConversionRunner {
     }
 
     /// Where to write the converted copy: beside the original, never over it.
-    static func unusedOutputURL(forConverting source: URL) -> URL {
+    static func unusedOutputURL(forConverting source: URL) throws -> URL {
         // Named from what the filename means rather than from what it says: the release group's
         // hash and its technical tokens are noise everywhere except the tracker it came from. An
         // episode is also filed under its show and season, which is the part a flat folder can't do.
@@ -462,18 +509,29 @@ enum ConversionRunner {
                 return candidate
             }
         }
-        return first
+        // Practically unreachable — but the old fallback returned `first`, which exists, and
+        // ffmpeg's `-y` would then overwrite a real file. Refusing is the only safe answer.
+        throw ConversionError.failed(String(localized: "Couldn't find an unused name for \(stem).mp4."))
     }
 
-    /// Refuses a conversion the disk can't hold, using the plan's own estimate of the output.
+    /// Refuses a conversion a disk can't hold, using the plan's own estimate of the output.
+    ///
+    /// Two volumes, not one: the output lands beside the source, but the Dolby Vision route's
+    /// intermediates — the raw stream and the rebuilt one — are written to the system temporary
+    /// directory, which lives on the boot volume. With the media folder on an external drive,
+    /// checking only the destination answered a question nobody was asking.
     private static func checkSpace(for plan: ConversionPlan, writingTo destination: URL) throws {
-        guard let free = try? destination.deletingLastPathComponent()
+        let output = plan.estimate.outputBytes
+        try checkVolume(of: destination.deletingLastPathComponent(), holds: output)
+        if plan.route.isDolbyVision {
+            try checkVolume(of: FileManager.default.temporaryDirectory, holds: output * 2)
+        }
+    }
+
+    private static func checkVolume(of directory: URL, holds needed: Int64) throws {
+        guard let free = try? directory
             .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
             .volumeAvailableCapacityForImportantUsage else { return }
-
-        // The Dolby Vision route writes a raw stream and an intermediate before the output, so it
-        // needs room for roughly twice what it produces.
-        let needed = plan.estimate.outputBytes * (plan.route.isDolbyVision ? 2 : 1)
         guard needed < free else {
             throw ConversionError.notEnoughSpace(needed: needed, free: free)
         }

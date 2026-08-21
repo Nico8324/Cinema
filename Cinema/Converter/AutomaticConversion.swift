@@ -42,12 +42,11 @@ final class AutomaticConversion {
 
     /// Begins watching, and converts anything already waiting.
     ///
-    /// - Parameter onLibraryChanged: run when the queue empties, so whatever was just made can be
-    ///   taken into the library. A conversion that finishes into a folder nobody re-reads is a film
-    ///   that exists and can't be watched until the app is relaunched.
-    func start(folder: URL, onLibraryChanged: (@MainActor () -> Void)? = nil) {
+    /// The queue's `onFinished` is wired by the app, not here — the queue is shared with the
+    /// queue window, and a manual Convert All needs the library rescan exactly as much as an
+    /// automatic one does.
+    func start(folder: URL) {
         guard Self.isEnabled, watcher == nil else { return }
-        queue.onFinished = onLibraryChanged
         watcher = FolderWatcher(folder: folder) { [weak self] in
             self?.considerFolder(folder)
         }
@@ -107,6 +106,10 @@ final class AutomaticConversion {
 private final class FolderWatcher {
     private let descriptor: CInt
     private let source: DispatchSourceFileSystemObject
+    /// One serial queue owns `debounce` — the event handler runs on it and the delayed work is
+    /// scheduled on it, so the work item is never touched from two threads at once. (It used to
+    /// live on a concurrent global queue, where two coalesced events could race the cancel.)
+    private let workQueue = DispatchQueue(label: "cinema.folder-watcher")
     private var debounce: DispatchWorkItem?
 
     init?(folder: URL, onChange: @escaping @MainActor () -> Void) {
@@ -114,7 +117,7 @@ private final class FolderWatcher {
         guard descriptor >= 0 else { return nil }
         source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: descriptor, eventMask: [.write, .rename, .delete],
-            queue: .global(qos: .utility))
+            queue: workQueue)
 
         source.setEventHandler { [weak self] in
             guard let self else { return }
@@ -124,7 +127,7 @@ private final class FolderWatcher {
             // Two seconds of quiet before believing the folder has settled. A 60 GB copy over a
             // network share writes for minutes; reacting to the first write would plan a file that
             // is a few megabytes long and conclude it has no video stream.
-            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2, execute: item)
+            workQueue.asyncAfter(deadline: .now() + 2, execute: item)
         }
         let descriptor = descriptor
         source.setCancelHandler { close(descriptor) }
@@ -132,7 +135,9 @@ private final class FolderWatcher {
     }
 
     deinit {
-        debounce?.cancel()
+        // The debounce isn't cancelled here — deinit runs on whatever thread drops the last
+        // reference, and reaching across to the work queue's state from it is the race this
+        // class had. A stale firing is harmless: `considerFolder` re-checks everything anyway.
         source.cancel()
     }
 }

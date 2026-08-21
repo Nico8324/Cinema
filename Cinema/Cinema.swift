@@ -59,27 +59,26 @@ struct Cinema: App {
                 .task {
                     guard let folder = MediaFolderScanner.folderURL else { return }
                     _ = await MediaFolderScanner.scan(folder: folder, into: modelContainer.mainContext)
-                    // Then, if it's been asked for, convert whatever the library couldn't take —
-                    // after the scan rather than before, so a film converted on a previous run is
-                    // already in the library and isn't planned a second time.
-                    automaticConversion.start(folder: folder) {
+                    // Wired whether or not automatic conversion is on: the queue window drives
+                    // the same queue, and a manual Convert All that finishes into a folder
+                    // nothing re-reads is a film that can't be watched until relaunch.
+                    automaticConversion.queue.onFinished = {
                         Task {
                             _ = await MediaFolderScanner.scan(folder: folder,
                                                               into: modelContainer.mainContext)
                         }
                     }
+                    // Then, if it's been asked for, convert whatever the library couldn't take —
+                    // after the scan rather than before, so a film converted on a previous run is
+                    // already in the library and isn't planned a second time.
+                    automaticConversion.start(folder: folder)
                 }
                 .onChange(of: automaticallyConverts) { _, isOn in
                     guard isOn, let folder = MediaFolderScanner.folderURL else {
                         automaticConversion.stop()
                         return
                     }
-                    automaticConversion.start(folder: folder) {
-                        Task {
-                            _ = await MediaFolderScanner.scan(folder: folder,
-                                                              into: modelContainer.mainContext)
-                        }
-                    }
+                    automaticConversion.start(folder: folder)
                 }
                 #endif
                 // Set minimum window size
@@ -110,6 +109,7 @@ struct Cinema: App {
         // person leaves open next to the library, not a preference they set once.
         Window("Conversion Queue", id: ConversionQueueView.windowID) {
             ConversionQueueView()
+                .environment(automaticConversion)
                 .appAppearance()
         }
         .defaultSize(width: 760, height: 560)

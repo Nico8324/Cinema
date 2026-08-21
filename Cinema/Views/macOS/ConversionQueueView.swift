@@ -18,8 +18,17 @@ struct ConversionQueueView: View {
     static let windowID = "conversion-queue"
 
     @AppStorage(MediaFolderScanner.folderPathKey) private var mediaFolderPath = ""
-    @State private var queue = ConversionQueue()
+    /// The app's one conversion queue — `AutomaticConversion`'s — not a private one.
+    ///
+    /// This window used to create its own `ConversionQueue`, which is exactly the state the
+    /// queue's own documentation warns about: two queues over one folder plan the same files
+    /// twice and race x265 against itself for the same output paths. One queue means the window
+    /// shows the jobs automatic conversion is already running, and a manual Convert All lands on
+    /// the same loop instead of beside it.
+    @Environment(AutomaticConversion.self) private var automaticConversion
     @State private var planning: Task<Void, Never>?
+
+    private var queue: ConversionQueue { automaticConversion.queue }
 
     private var folder: URL? {
         mediaFolderPath.isEmpty ? nil : URL(filePath: mediaFolderPath)

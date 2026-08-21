@@ -6,6 +6,7 @@ The order to convert a folder of films in, and why that order changes as it goes
 */
 
 #if os(macOS)
+import AppKit
 import Foundation
 import Observation
 import os
@@ -46,6 +47,20 @@ final class ConversionQueue {
     /// The process currently doing the work, so it can be stopped mid-flight.
     private var currentProcess: Process?
     private var work: Task<Void, Never>?
+    private var terminationObserver: (any NSObjectProtocol)?
+
+    init() {
+        // The app quitting must not orphan a running encoder: an unmonitored ffmpeg would keep
+        // writing a file that will never be verified or renamed into place. The in-progress
+        // file itself is hidden and swept at the next planning pass, so nothing stale survives.
+        terminationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.stop()
+            }
+        }
+    }
 
     /// Called when the queue runs dry, so the library can pick up what was just made. Without it a
     /// film converted while the app was running stays invisible until the next launch — the folder
@@ -108,6 +123,12 @@ final class ConversionQueue {
     func plan(folder: URL) async {
         plans = []
         failures = []
+        // A run that quit or crashed mid-encode leaves its hidden in-progress file behind;
+        // planning is the natural moment to clear those out, and the one moment it's known
+        // safe — nothing is being written while nothing is converting.
+        if !isConverting {
+            ConversionRunner.removeAbandonedInProgressFiles(under: folder)
+        }
         let candidates = Self.convertibleFiles(in: folder)
         progress = Progress(planned: 0, total: candidates.count, current: "")
 
@@ -117,6 +138,9 @@ final class ConversionQueue {
                                 current: url.deletingPathExtension().lastPathComponent)
             do {
                 let plan = try await ConversionPlan.plan(for: url)
+                // Checked *after* the await: a cancelled planning pass could otherwise append
+                // one last plan into a list a newer pass had already reset.
+                guard !Task.isCancelled else { break }
                 plans.append(plan)
                 sort()
             } catch is CancellationError {
@@ -146,10 +170,15 @@ final class ConversionQueue {
 
     /// Stops after killing whatever is running. The half-written output goes with it — a partial
     /// file that looks like a conversion is worse than no file.
+    ///
+    /// `work` is *not* cleared here: it stays set until the cancelled loop actually unwinds
+    /// through `finishRunning()`. Clearing it immediately let `start()` pass its guard and open
+    /// a second conversion loop over the same plans while the first was still inside the runner.
     func stop() {
         work?.cancel()
-        currentProcess?.terminate()
-        work = nil
+        if currentProcess?.isRunning == true {
+            currentProcess?.terminate()
+        }
         running = nil
     }
 
@@ -181,8 +210,21 @@ final class ConversionQueue {
             recordCompletion(of: plan, encodeSeconds: outcome.encodeSeconds,
                              finishSeconds: outcome.finishSeconds, outputBytes: outcome.outputBytes)
         } catch is CancellationError {
-            running = nil
-            return
+            // Two very different things arrive as "cancelled": the person pressing Stop, and a
+            // tool dying to an outside signal — x265 taken by the out-of-memory killer three
+            // hours into a 4K encode, a `killall ffmpeg`, a crash. Only the first is a
+            // cancellation. Treating the second as one left the plan in the queue with the loop
+            // still alive, which re-ran the identical job forever on an unattended machine.
+            if Task.isCancelled {
+                running = nil
+                return
+            }
+            finished.insert(Finished(id: plan.id, name: plan.source.url.lastPathComponent,
+                                     elapsed: (ContinuousClock.now - started).seconds,
+                                     estimated: plan.estimate.total, outputBytes: 0,
+                                     error: String(localized: "The converter was stopped from outside the app."),
+                                     originalTrashed: false), at: 0)
+            plans.removeAll { $0.id == plan.id }
         } catch {
             // A failed job leaves the queue rather than blocking it, and says why.
             finished.insert(Finished(id: plan.id, name: plan.source.url.lastPathComponent,

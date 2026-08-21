@@ -100,16 +100,29 @@ extension Process {
     ///
     /// `waitUntilExit()` parks the calling thread. On the cooperative pool that thread is a scarce
     /// resource shared with every other task, including the ones this process is waiting on.
+    ///
+    /// Cancellation reaches the tool itself: cancelling the task SIGTERMs the process, so a Stop
+    /// pressed during *any* stage — verification and the subtitle passes included, which the queue
+    /// never held a reference to — actually stops the work instead of letting it run to completion
+    /// behind a dead button. The checks before and after make a cancelled run deterministic even
+    /// when the cancel lands in the gap before the tool has launched.
     func runToCompletion() async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            terminationHandler = { _ in continuation.resume() }
-            do {
-                try run()
-            } catch {
-                terminationHandler = nil
-                continuation.resume(throwing: error)
+        try Task.checkCancellation()
+        let box = TerminationBox(self)
+        try await withTaskCancellationHandler(operation: {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                terminationHandler = { _ in continuation.resume() }
+                do {
+                    try run()
+                } catch {
+                    terminationHandler = nil
+                    continuation.resume(throwing: error)
+                }
             }
-        }
+        }, onCancel: {
+            box.terminateIfRunning()
+        })
+        try Task.checkCancellation()
     }
 
     /// Runs one tool with its output piped straight into another.
@@ -297,6 +310,24 @@ extension Process {
     private static func lastLine(of text: String) -> String {
         text.split(separator: "\n").last.map(String.init)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+}
+
+/// Carries a `Process` into a cancellation handler.
+///
+/// `@unchecked Sendable` because `Process` isn't Sendable, while `terminate()` itself is safe to
+/// call from any thread. `isRunning` is the guard that matters: `terminate()` on a process that
+/// was never launched raises an Objective-C exception rather than returning an error.
+private final class TerminationBox: @unchecked Sendable {
+    private let process: Process
+
+    init(_ process: Process) {
+        self.process = process
+    }
+
+    func terminateIfRunning() {
+        guard process.isRunning else { return }
+        process.terminate()
     }
 }
 #endif

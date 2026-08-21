@@ -25,33 +25,45 @@ enum LibraryReconciler {
 
         let fileManager = FileManager.default
         let referencedMedia = Set(videos.compactMap(\.localFilename))
-        // Per-video thumbnails, plus the shared show-backdrop artwork of every
-        // show that still has episodes in the library.
+        // The show artwork worth keeping is decided by Show rows as well as episodes: a show
+        // deliberately outlives its last episode with its match intact, and sweeping
+        // `show-<id>.jpg` the launch after that deletion would take the artwork the row is
+        // keeping the match *for*.
+        let matchedShowIDs = Set(videos.compactMap(\.tmdbShowID))
+            .union(((try? context.fetch(FetchDescriptor<Show>())) ?? []).compactMap(\.tmdbShowID))
+        // Per-video thumbnails, plus the shared show-backdrop artwork.
         let referencedThumbnails = Set(videos.compactMap { video in
             video.thumbnailFilename.map { MediaStore.thumbnailURL(forFilename: $0).lastPathComponent }
-        }).union(Set(videos.compactMap { video in
-            video.tmdbShowID.map {
-                MediaStore.thumbnailURL(forFilename: MediaStore.showArtworkFilename(forShowID: $0)).lastPathComponent
-            }
+        }).union(Set(matchedShowIDs.map {
+            MediaStore.thumbnailURL(forFilename: MediaStore.showArtworkFilename(forShowID: $0)).lastPathComponent
         }))
 
         // Media files no library entry references: dead bytes — remove them.
         var removedOrphans = 0
+        var failedRemovals = 0
+        func remove(_ url: URL) {
+            do {
+                try fileManager.removeItem(at: url)
+                removedOrphans += 1
+            } catch {
+                // Counted and named: a sweep that silently fails on the same file every launch
+                // looks identical to one that never needed to run.
+                failedRemovals += 1
+                logger.error("Couldn't remove orphaned \(url.lastPathComponent, privacy: .public): \(error.localizedDescription)")
+            }
+        }
         for url in files(in: MediaStore.videosDirectory) where !referencedMedia.contains(url.lastPathComponent) {
-            try? fileManager.removeItem(at: url)
-            removedOrphans += 1
+            remove(url)
         }
 
         // Thumbnails whose video is gone.
         for url in files(in: MediaStore.thumbnailsDirectory) where !referencedThumbnails.contains(url.lastPathComponent) {
-            try? fileManager.removeItem(at: url)
-            removedOrphans += 1
+            remove(url)
         }
 
         // Posters are keyed by the same filenames, so the same set decides which are still live.
         for url in files(in: MediaStore.postersDirectory) where !referencedThumbnails.contains(url.lastPathComponent) {
-            try? fileManager.removeItem(at: url)
-            removedOrphans += 1
+            remove(url)
         }
 
         // Entries whose imported file vanished can never play again — remove them
@@ -77,8 +89,8 @@ enum LibraryReconciler {
             context.saveReportingErrors()
         }
 
-        if removedOrphans > 0 || removedEntries > 0 {
-            logger.notice("Reconciled the library: removed \(removedOrphans) orphaned file(s) and \(removedEntries) dead entrie(s).")
+        if removedOrphans > 0 || removedEntries > 0 || failedRemovals > 0 {
+            logger.notice("Reconciled the library: removed \(removedOrphans) orphaned file(s) and \(removedEntries) dead entrie(s); \(failedRemovals) removal(s) failed.")
         }
     }
 
