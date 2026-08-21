@@ -442,8 +442,15 @@ enum ConversionRunner {
 
     /// Where to write the converted copy: beside the original, never over it.
     static func unusedOutputURL(forConverting source: URL) -> URL {
-        let directory = source.deletingLastPathComponent()
-        let stem = source.deletingPathExtension().lastPathComponent
+        // Named from what the filename means rather than from what it says: the release group's
+        // hash and its technical tokens are noise everywhere except the tracker it came from. An
+        // episode is also filed under its show and season, which is the part a flat folder can't do.
+        let components = OutputName.relativeComponents(forConverting: source)
+        let directory = components.dropLast().reduce(source.deletingLastPathComponent()) {
+            $0.appending(path: $1)
+        }
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let stem = components.last ?? source.deletingPathExtension().lastPathComponent
 
         let first = directory.appending(path: "\(stem).mp4")
         guard FileManager.default.fileExists(atPath: first.path(percentEncoded: false)) else {

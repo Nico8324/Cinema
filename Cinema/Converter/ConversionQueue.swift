@@ -266,16 +266,22 @@ final class ConversionQueue {
     /// converted, and offering to do it again is offering to spend five hours reproducing a file
     /// that's already there.
     nonisolated static func convertibleFiles(in folder: URL) -> [URL] {
-        let contents = (try? FileManager.default.contentsOfDirectory(
-            at: folder, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])) ?? []
+        // Walked rather than listed: converted episodes are filed under `Show/Season 01/`, and a
+        // flat listing wouldn't see them — so every one would be planned again.
+        let contents = OutputName.videoFiles(under: folder,
+                                             extensions: convertibleExtensions.union(["mp4", "m4v"]))
 
+        // Compared by what the names *mean*, not by the characters in them. A converted file is
+        // named for the film rather than for the release, so `Predator__Badlands_615165C3.mkv` and
+        // `Predator Badlands (2025).mp4` no longer share a stem — and a stem comparison would send
+        // every already-converted film round again, unattended, to produce a duplicate.
         let converted = Set(contents
             .filter { ["mp4", "m4v"].contains($0.pathExtension.lowercased()) }
-            .map { $0.deletingPathExtension().lastPathComponent })
+            .map(OutputName.identity))
 
         return contents
             .filter { convertibleExtensions.contains($0.pathExtension.lowercased()) }
-            .filter { !converted.contains($0.deletingPathExtension().lastPathComponent) }
+            .filter { !converted.contains(OutputName.identity(of: $0)) }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 }

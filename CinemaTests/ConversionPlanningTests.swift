@@ -500,6 +500,79 @@ struct ConversionPlanningTests {
         #expect(arguments.contains("default+forced"))
     }
 
+    // MARK: - What a converted file is called
+
+    /// A disc remux's filename is written for a tracker, not for a person. The converted copy is
+    /// the one that ends up in Finder, in a backup and on another machine, so it gets the name the
+    /// library would show.
+    @Test func aConvertedFilmIsNamedForTheFilm() {
+        let source = URL(filePath: "/m/Predator__Badlands_615165C3.mkv")
+        #expect(OutputName.stem(forConverting: source) == "Predator Badlands")
+
+        let dated = URL(filePath: "/m/Sinners.2025.2160p.UHD.BluRay.x265-GROUP.mkv")
+        #expect(OutputName.stem(forConverting: dated) == "Sinners (2025)")
+    }
+
+    /// Episodes are zero-padded so a folder sorts the way the series runs — otherwise episode 10
+    /// files between 1 and 2, and a season reads out of order everywhere but this app.
+    @Test func anEpisodeIsNamedSoTheFolderSortsInOrder() {
+        let source = URL(filePath: "/m/Suits.S01E01.1080p.BluRay.x264.mkv")
+        #expect(OutputName.stem(forConverting: source) == "Suits S01E01")
+    }
+
+    /// A series is the one thing a flat folder can't hold: nine seasons of twenty-two episodes is
+    /// two hundred files interleaved with everything else.
+    @Test func episodesAreFiledUnderTheirShowAndSeason() {
+        let source = URL(filePath: "/m/Suits.S01E01.1080p.mkv")
+        #expect(OutputName.relativeComponents(forConverting: source)
+                == ["Suits", "Season 01", "Suits S01E01"])
+
+        // A film stays where it is — a folder each would only bury it.
+        let film = URL(filePath: "/m/Sinners.2025.x265.mkv")
+        #expect(OutputName.relativeComponents(forConverting: film) == ["Sinners (2025)"])
+    }
+
+    /// Converted episodes live in subfolders now, so the already-converted check has to walk the
+    /// tree. A flat listing wouldn't see them, and every episode would be converted again —
+    /// unattended, for hours, to produce files that already exist.
+    @Test func aConvertedEpisodeInItsSeasonFolderIsFound() throws {
+        let folder = URL.temporaryDirectory.appending(path: "seasons-\(UUID().uuidString)")
+        let season = folder.appending(path: "Suits/Season 01")
+        try FileManager.default.createDirectory(at: season, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try Data().write(to: folder.appending(path: "Suits.S01E01.1080p.mkv"))
+        try Data().write(to: season.appending(path: "Suits S01E01.mp4"))
+        try Data().write(to: folder.appending(path: "Suits.S01E02.1080p.mkv"))
+
+        let waiting = ConversionQueue.convertibleFiles(in: folder).map(\.lastPathComponent)
+        #expect(waiting == ["Suits.S01E02.1080p.mkv"])
+    }
+
+    /// The identity check is what stops an already-converted film being converted again. It used to
+    /// compare raw stems, which worked only while the output was named after the source; once the
+    /// output is named properly the two no longer look alike, and a stem comparison would send
+    /// every film in the folder round again — unattended, if automatic conversion is on.
+    @Test func aRenamedOutputIsStillRecognisedAsTheSourcesConversion() throws {
+        let folder = URL.temporaryDirectory.appending(path: "named-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        for name in ["Predator__Badlands_615165C3.mkv", "Predator Badlands.mp4", "Sinners.2025.x265.mkv"] {
+            try Data().write(to: folder.appending(path: name))
+        }
+        let waiting = ConversionQueue.convertibleFiles(in: folder).map(\.lastPathComponent)
+        #expect(waiting == ["Sinners.2025.x265.mkv"])
+    }
+
+    /// A name that can't be written is worse than an ugly one, and `/` and `:` are both path
+    /// separators as far as something in this stack is concerned.
+    @Test func aTitleWithPathCharactersStillMakesAFilename() {
+        let source = URL(filePath: "/m/Face%Off 8 1-2 : The Return.mkv")
+        let stem = OutputName.stem(forConverting: source)
+        #expect(!stem.contains("/"))
+        #expect(!stem.contains(":"))
+        #expect(!stem.isEmpty)
+    }
+
     // MARK: - Automatic conversion
 
     /// Both of these are off until someone turns them on, and the test exists because a default is
