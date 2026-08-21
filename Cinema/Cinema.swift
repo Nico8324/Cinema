@@ -192,19 +192,38 @@ struct Cinema: App {
         }
     }
 
+    /// Where the library lives on disk.
+    ///
+    /// Explicit rather than SwiftData's default, because the default is
+    /// `Application Support/default.store` — a path every unsandboxed app that takes the default
+    /// shares. The Mac app runs without a sandbox, and another app's store was found at that path:
+    /// Cinema couldn't migrate it, filed it as broken, and took the location over, leaving two
+    /// apps trading one file back and forth. A name of Cinema's own ends the fight.
+    /// iOS and visionOS keep the historical default; inside a sandbox it was never shared, and
+    /// moving it would orphan every existing library.
+    private static var storeURL: URL {
+        #if os(macOS)
+        URL.applicationSupportDirectory.appending(path: "Cinema/Cinema.store")
+        #else
+        URL.applicationSupportDirectory.appending(path: "default.store")
+        #endif
+    }
+
     private static func openModelContainer() throws -> ModelContainer {
         let schema = Schema(versionedSchema: CinemaSchemaV8.self)
+        try? FileManager.default.createDirectory(at: storeURL.deletingLastPathComponent(),
+                                                 withIntermediateDirectories: true)
         return try ModelContainer(
             for: schema,
             migrationPlan: CinemaMigrationPlan.self,
-            configurations: [ModelConfiguration(schema: schema)]
+            configurations: [ModelConfiguration(schema: schema, url: storeURL)]
         )
     }
 
     /// Renames the default store files so a fresh store can be created, preserving the broken
     /// one on disk for potential recovery instead of destroying data.
     private static func moveBrokenStoreAside() {
-        let storeURL = URL.applicationSupportDirectory.appending(path: "default.store")
+        let storeURL = Self.storeURL
         let marker = UUID().uuidString
         for suffix in ["", "-shm", "-wal"] {
             let source = URL(filePath: storeURL.path + suffix)
