@@ -42,7 +42,10 @@ enum MediaFolderTidy {
     /// Separated from applying so the list can be read first. A bulk rename of someone's film
     /// library is the kind of thing that should be looked at before it happens, not explained
     /// afterwards.
-    static func plannedMoves(in folder: URL) -> [Move] {
+    /// - Parameter years: the year the library holds for each file, keyed by resolved path. A
+    ///   disc remux is usually named without one while the library has it from a TMDB match, and a
+    ///   bare title is ambiguous across remakes — so the match wins where there is one.
+    static func plannedMoves(in folder: URL, years: [String: Int] = [:]) -> [Move] {
         // Both sides resolved to the same form before anything is compared. A directory
         // enumeration hands back `/private/var/…` where the folder was given as `/var/…`, and the
         // two are the same place — so a file already sitting at its correct name looks different
@@ -55,7 +58,8 @@ enum MediaFolderTidy {
         var moves: [Move] = []
 
         for file in files.sorted(by: { $0.path < $1.path }) {
-            let components = OutputName.relativeComponents(forConverting: file)
+            let components = OutputName.relativeComponents(
+                forConverting: file, year: years[file.path(percentEncoded: false)])
             let directory = components.dropLast().reduce(root) { $0.appending(path: $1) }
             let destination = directory
                 .appending(path: components.last ?? file.deletingPathExtension().lastPathComponent)
@@ -122,6 +126,16 @@ enum MediaFolderTidy {
             logger.notice("Tidied \(moved.count, privacy: .public) file(s).")
         }
         return (moved, failed)
+    }
+
+    /// What the library knows about each file's year, keyed the way `plannedMoves` looks it up.
+    @MainActor
+    static func knownYears(in context: ModelContext) -> [String: Int] {
+        let videos = (try? context.fetch(FetchDescriptor<Video>())) ?? []
+        return videos.reduce(into: [:]) { years, video in
+            guard let path = video.externalPath, video.yearOfRelease > 0 else { return }
+            years[resolved(path)] = video.yearOfRelease
+        }
     }
 
     private static func resolved(_ path: String) -> String {

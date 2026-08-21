@@ -548,6 +548,35 @@ struct ConversionPlanningTests {
         #expect(waiting == ["Suits.S01E02.1080p.mkv"])
     }
 
+    /// The library knows the year even when the filename doesn't — a disc remux is usually named
+    /// without one, and a bare title is ambiguous across remakes.
+    @Test func theLibrarysYearBeatsTheFilenames() {
+        let source = URL(filePath: "/m/Sinners_AEBB6DBE.mkv")
+        #expect(OutputName.stem(forConverting: source) == "Sinners")
+        #expect(OutputName.stem(forConverting: source, year: 2025) == "Sinners (2025)")
+
+        // An episode is identified by its season and number; a year would only clutter it.
+        let episode = URL(filePath: "/m/Suits_S1E1.mkv")
+        #expect(OutputName.stem(forConverting: episode, year: 2011) == "Suits S01E01")
+    }
+
+    /// The year must not enter identity, because it arrives from two different places. Once a film
+    /// is matched and tidied to `Sinners (2025).mp4`, an identity that moved with it would stop
+    /// recognising `Sinners_AEBB6DBE.mkv` as already converted — and re-encode it, unattended, for
+    /// hours, to produce a duplicate.
+    @Test func aYearAddedByAMatchDoesNotMakeTheSourceLookUnconverted() throws {
+        #expect(OutputName.identity(of: URL(filePath: "/m/Sinners (2025).mp4"))
+                == OutputName.identity(of: URL(filePath: "/m/Sinners_AEBB6DBE.mkv")))
+
+        let folder = URL.temporaryDirectory.appending(path: "years-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try Data().write(to: folder.appending(path: "Sinners_AEBB6DBE.mkv"))
+        try Data().write(to: folder.appending(path: "Sinners (2025).mp4"))
+
+        #expect(ConversionQueue.convertibleFiles(in: folder).isEmpty)
+    }
+
     /// The identity check is what stops an already-converted film being converted again. It used to
     /// compare raw stems, which worked only while the output was named after the source; once the
     /// output is named properly the two no longer look alike, and a stem comparison would send

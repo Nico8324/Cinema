@@ -38,7 +38,10 @@ struct MediaFolderTidyView: View {
             footer
         }
         .frame(width: 620, height: 460)
-        .task { moves = MediaFolderTidy.plannedMoves(in: folder) }
+        .task {
+            moves = MediaFolderTidy.plannedMoves(
+                in: folder, years: MediaFolderTidy.knownYears(in: modelContext))
+        }
     }
 
     private var header: some View {

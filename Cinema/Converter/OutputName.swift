@@ -25,14 +25,18 @@ enum OutputName {
     /// where it's known because two films share a title often enough to matter, and a season and
     /// episode are zero-padded so a folder sorts the way the series runs rather than putting
     /// episode 10 before episode 2.
-    static func stem(forConverting source: URL) -> String {
+    /// - Parameter year: the year the library knows, which beats the filename's.
+    ///   A disc remux is often named without one — `Sinners_AEBB6DBE.mkv` — while the library has
+    ///   2025 from its TMDB match, and a bare title is genuinely ambiguous across remakes. The
+    ///   converter has no match to consult yet and passes `nil`; tidying an existing library does.
+    static func stem(forConverting source: URL, year: Int? = nil) -> String {
         let original = source.deletingPathExtension().lastPathComponent
         let parsed = FilenameMetadata.parse(original)
 
         var name: String
         if let episode = parsed.episode {
             name = "\(episode.showName) S\(String(format: "%02d", episode.season))E\(String(format: "%02d", episode.episode))"
-        } else if let year = parsed.year {
+        } else if let year = year ?? parsed.year {
             name = "\(parsed.title) (\(year))"
         } else {
             name = parsed.title
@@ -54,8 +58,8 @@ enum OutputName {
     ///
     /// Seasons are zero-padded for the same reason episodes are: `Season 10` sorts before
     /// `Season 2` otherwise, in Finder and in every other app that isn't this one.
-    static func relativeComponents(forConverting source: URL) -> [String] {
-        let stem = stem(forConverting: source)
+    static func relativeComponents(forConverting source: URL, year: Int? = nil) -> [String] {
+        let stem = stem(forConverting: source, year: year)
         guard let episode = FilenameMetadata.parse(source.deletingPathExtension().lastPathComponent).episode
         else { return [stem] }
         return [sanitised(episode.showName), "Season \(String(format: "%02d", episode.season))", stem]
@@ -83,7 +87,20 @@ enum OutputName {
     /// So identity is what the two names *parse to*, which is the same question the library asks
     /// when it decides two files are one film.
     static func identity(of url: URL) -> String {
-        stem(forConverting: url).lowercased()
+        // **The year is deliberately not part of identity.** It can arrive from two places — the
+        // filename, or the library's TMDB match — so a film's name legitimately changes from
+        // `Sinners` to `Sinners (2025)` the moment it is matched or tidied. An identity that moved
+        // with it would stop recognising `Sinners_AEBB6DBE.mkv` as already converted, and the
+        // source would be re-encoded: hours of work, unattended, to produce a duplicate.
+        //
+        // The cost is that two films sharing a title and differing only by year read as one, and
+        // the second would be skipped rather than converted. That is the right way round: a
+        // conversion not offered is a button away, and a conversion done twice is an evening.
+        var stem = stem(forConverting: url).lowercased()
+        if let year = stem.firstRange(of: /\s+\(\d{4}\)$/) {
+            stem.removeSubrange(year)
+        }
+        return stem
     }
 
     /// Every video file under a folder, however deep.
