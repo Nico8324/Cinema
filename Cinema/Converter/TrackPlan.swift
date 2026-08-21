@@ -44,6 +44,27 @@ enum TrackPlan {
         let bitrate: String?
         /// The one track the file opens in. Exactly one kept track carries this.
         let isDefault: Bool
+        /// How many channels this track has **after** the conversion.
+        ///
+        /// Not always what it went in with. E-AC-3 holds 5.1 and no more, so a 7.1 source loses two
+        /// channels — and the encoder does that silently, as a default nobody asked for. Carrying
+        /// the number here is what lets the plan say so before the work starts instead of leaving
+        /// it to be discovered by probing the finished file.
+        let outputChannels: Int
+    }
+
+    /// The most channels this machine's encoder can actually write.
+    ///
+    /// **A tool limit, not a format one.** E-AC-3 itself carries 7.1 — Apple's own authoring
+    /// specification lists it at 384 kbit/s — but `ffmpeg -h encoder=eac3` stops at `5.1`, and a
+    /// 7.1 input silently comes back `5.1(side)`. Every 7.1 disc soundtrack meets that ceiling.
+    /// Naming it after the format would blame the container for one encoder's limitation and
+    /// discourage anyone from reaching for a better one.
+    static func channelCeiling(for codec: String) -> Int {
+        switch codec {
+        case "eac3", "ac3": 6
+        default: 8
+        }
     }
 
     struct Selection: Sendable {
@@ -162,15 +183,22 @@ enum TrackPlan {
             let isDefault = track.index == winner?.index
             guard !passthroughAudio.contains(track.codec) else {
                 return AudioChoice(track: track, isCopy: true, targetCodec: nil,
-                                   bitrate: nil, isDefault: isDefault)
+                                   bitrate: nil, isDefault: isDefault,
+                                   outputChannels: track.channels)
             }
             // Multichannel lands on E-AC-3 — the format Apple ships surround in — where AAC is
             // what it ships stereo in.
             let targetCodec = track.channels > 2 ? "eac3" : "aac"
             let bitrate = track.channels > 2 ? "640k" : "256k"
-            selection.notes.append("\(track.codec.uppercased()) → \(displayName(forAudioCodec: targetCodec))")
+            let outputChannels = min(track.channels, channelCeiling(for: targetCodec))
+            if outputChannels < track.channels {
+                selection.notes.append("\(track.codec.uppercased()) \(layoutName(forChannels: track.channels)) → \(displayName(forAudioCodec: targetCodec)) \(layoutName(forChannels: outputChannels))")
+            } else {
+                selection.notes.append("\(track.codec.uppercased()) → \(displayName(forAudioCodec: targetCodec))")
+            }
             return AudioChoice(track: track, isCopy: false, targetCodec: targetCodec,
-                               bitrate: bitrate, isDefault: isDefault)
+                               bitrate: bitrate, isDefault: isDefault,
+                               outputChannels: outputChannels)
         }
         if duplicatesDropped > 0 {
             selection.notes.append(String(localized: "\(duplicatesDropped) duplicate audio tracks dropped"))
@@ -180,12 +208,76 @@ enum TrackPlan {
         return selection
     }
 
+    // MARK: - What a subtitle track is
+
+    /// Words that name a forced track, in the languages this library actually contains.
+    ///
+    /// Deliberately short, and deliberately **not** the last word. Every list like this encodes an
+    /// assumption about who pressed the disc: an Italian release writes `FORZATI`, a French one
+    /// `FORCÉS`, a German `ERZWUNGEN`, and the entry nobody added fails silently. The list is a
+    /// cheap first pass over the common cases; `SubtitleContent` is what catches the rest.
+    private static let forcedWords = ["forced", "forcés", "forces", "forzati", "erzwungen", "signs"]
+
+    /// Words that name an SDH track. Same caveat, same backstop — `NON UDENTI` is why.
+    private static let sdhWords = ["sdh", "hearing", "non udenti", "hörgeschädigte", "sourds"]
+
+    /// Whether a track is forced, from every signal available in the order they can be trusted.
+    ///
+    /// The disposition first, because a source that sets it means it. Then the title, which is
+    /// where most rips actually declare it. Then the cue rate, which is the only signal that
+    /// survives a language nobody anticipated — a forced track runs 1–2 cues a minute against
+    /// 12–22 for a full one, because it translates the alien dialogue and nothing else.
+    static func isForced(_ track: SourceMedia.SubtitleTrack,
+                         content: SubtitleContent? = nil) -> Bool {
+        if track.isForced { return true }
+        if let title = track.title?.lowercased(), forcedWords.contains(where: title.contains) {
+            return true
+        }
+        return content?.readsAsForced ?? false
+    }
+
+    /// Whether a track is SDH, by the same ladder — flag, title, then the cues.
+    ///
+    /// The last rung is a different measurement from the forced one and has to be: cue *rate*
+    /// needs a sibling full track to compare against, and *Supergirl* has none. What separates
+    /// them is the cue text — see `SubtitleContent.readsAsSDH`.
+    static func isHearingImpaired(_ track: SourceMedia.SubtitleTrack,
+                                  content: SubtitleContent? = nil) -> Bool {
+        if track.isHearingImpaired { return true }
+        if let title = track.title?.lowercased(), sdhWords.contains(where: title.contains) {
+            return true
+        }
+        return content?.readsAsSDH ?? false
+    }
+
+    /// The subtitle tracks that actually reach the output, after the single-language rule.
+    ///
+    /// One definition, read by the mux *and* by the pass that labels the finished file. When those
+    /// two disagreed — the mux keeping English, the labelling still counting every language — the
+    /// labelling pass found fewer tracks than it expected and refused to tag them, which is the
+    /// right response to a mismatch and the wrong thing to have to discover after an encode.
+    static func keptSubtitles(for media: SourceMedia, spokenLanguage: String?) -> [SourceMedia.SubtitleTrack] {
+        let text = media.subtitles.filter { textSubtitles.contains($0.codec) }
+        guard keepsOnlyOriginalLanguage, let spokenLanguage else { return text }
+        return text.filter { $0.language.map(normalisedLanguage) == spokenLanguage }
+    }
+
+    /// The language a film opens in, which is what the single-language rule keeps.
+    static func spokenLanguage(of media: SourceMedia, preferredLanguage: String? = nil) -> String? {
+        selectAudio(from: media, preferredLanguage: preferredLanguage)
+            .audio.first(where: \.isDefault)?.track.language.map(normalisedLanguage)
+    }
+
     /// The audio and subtitle arguments, identical on both routes.
     ///
     /// - Parameter sidecars: subtitle files found beside the source, each already its own ffmpeg
     ///   input — a sidecar at `sidecars[offset]` is always input `offset + 1`.
+    /// - Parameter content: what each kept subtitle track's cues contain, keyed by stream index,
+    ///   from `SubtitleScan`. Empty is legal and means forced and SDH are decided from the flag and
+    ///   the title alone — the answer a source in an unanticipated language gets wrong.
     static func trackArguments(for media: SourceMedia, sidecars: [SidecarSubtitle] = [],
-                               preferredLanguage: String? = nil) -> (arguments: [String], notes: [String]) {
+                               preferredLanguage: String? = nil,
+                               content: [Int: SubtitleContent] = [:]) -> (arguments: [String], notes: [String]) {
         var arguments: [String] = []
         var notes: [String] = []
 
@@ -196,6 +288,12 @@ enum TrackPlan {
                 arguments += ["-c:a:\(offset)", "copy"]
             } else {
                 arguments += ["-c:a:\(offset)", choice.targetCodec!, "-b:a:\(offset)", choice.bitrate!]
+                // Stated rather than left to the encoder. ffmpeg downmixes to its ceiling on its
+                // own, which produces the right file for the wrong reason: a silent default is
+                // indistinguishable from a decision, and only a decision can be reported.
+                if choice.outputChannels != choice.track.channels {
+                    arguments += ["-ac:a:\(offset)", "\(choice.outputChannels)"]
+                }
             }
             arguments += ["-disposition:a:\(offset)", audioDisposition(for: choice)]
             // Written explicitly rather than trusted to travel: the Dolby Vision route carries
@@ -207,14 +305,11 @@ enum TrackPlan {
         }
         notes += selection.notes
 
-        var text = media.subtitles.filter { textSubtitles.contains($0.codec) }
-        if TrackPlan.keepsOnlyOriginalLanguage,
-           let spoken = selection.audio.first(where: \.isDefault)?.track.language.map(normalisedLanguage) {
-            let all = text.count
-            text = text.filter { $0.language.map(normalisedLanguage) == spoken }
-            if all > text.count {
-                notes.append(String(localized: "\(all - text.count) subtitle tracks dropped — only the film’s own language is kept"))
-            }
+        let spoken = selection.audio.first(where: \.isDefault)?.track.language.map(normalisedLanguage)
+        let allText = media.subtitles.filter { textSubtitles.contains($0.codec) }
+        let text = keptSubtitles(for: media, spokenLanguage: spoken)
+        if allText.count > text.count {
+            notes.append(String(localized: "\(allText.count - text.count) subtitle tracks dropped — only the film’s own language is kept"))
         }
 
         // Which subtitle track, if any, starts switched on: a forced track in the language the
@@ -224,7 +319,7 @@ enum TrackPlan {
         let defaultAudioLanguage = selection.audio.first(where: \.isDefault)?
             .track.language.map(normalisedLanguage)
         let forcedLanguages: [String?] =
-            text.map { $0.isForced ? $0.language.map(normalisedLanguage) : nil }
+            text.map { isForced($0, content: content[$0.index]) ? $0.language.map(normalisedLanguage) : nil }
             + sidecars.map { $0.isForced ? $0.language.map(normalisedLanguage) : nil }
         let defaultSubtitle = forcedLanguages.firstIndex { $0 != nil && $0 == defaultAudioLanguage }
 
@@ -232,8 +327,8 @@ enum TrackPlan {
             arguments += ["-map", "0:\(track.index)"]
             arguments += ["-disposition:s:\(offset)", subtitleDisposition(
                 isDefault: offset == defaultSubtitle,
-                isForced: track.isForced,
-                isHearingImpaired: track.isHearingImpaired
+                isForced: isForced(track, content: content[track.index]),
+                isHearingImpaired: isHearingImpaired(track, content: content[track.index])
             )]
             if let language = track.language {
                 arguments += ["-metadata:s:s:\(offset)", "language=\(normalisedLanguage(language))"]
@@ -339,6 +434,18 @@ enum TrackPlan {
     /// language pickers read.
     private static func autonym(for language: String) -> String {
         Locale(identifier: language).localizedString(forLanguageCode: language) ?? language.uppercased()
+    }
+
+    /// A channel count as people say it: 7.1, not "8-channel".
+    static func layoutName(forChannels channels: Int) -> String {
+        switch channels {
+        case 1: String(localized: "mono")
+        case 2: String(localized: "stereo")
+        case 6: "5.1"
+        case 7: "6.1"
+        case 8: "7.1"
+        default: String(localized: "\(channels)-channel")
+        }
     }
 
     private static func displayName(forAudioCodec codec: String) -> String {

@@ -262,8 +262,13 @@ private struct ConversionPlanRow: View {
             return String(localized: "The picture changes shape, so nothing is cropped")
         case .asymmetricLetterbox(let top, let bottom):
             return String(localized: "Uneven letterbox: \(top) above, \(bottom) below")
-        case .audioNeedsTranscode(let codec, let channels):
-            return String(localized: "\(codec.uppercased()) \(channels)-channel audio has to be re-encoded to play")
+        case .audioNeedsTranscode(let codec, let channels, let outputChannels):
+            let from = TrackPlan.layoutName(forChannels: channels)
+            guard outputChannels < channels else {
+                return String(localized: "\(from) \(codec.uppercased()) audio has to be re-encoded to play")
+            }
+            let to = TrackPlan.layoutName(forChannels: outputChannels)
+            return String(localized: "\(from) \(codec.uppercased()) audio re-encoded to \(to) — the encoder here cannot write more than \(to)")
         case .atmosPreserved:
             return String(localized: "Dolby Atmos is carried over intact")
         case .atmosLost:

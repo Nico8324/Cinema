@@ -72,7 +72,9 @@ struct ConversionPlan: Sendable, Identifiable, Equatable {
         case bitmapSubtitlesDropped(languages: [String])
         case aspectRatioVaries
         case asymmetricLetterbox(top: Int, bottom: Int)
-        case audioNeedsTranscode(codec: String, channels: Int)
+        /// The film's own soundtrack has to be rebuilt to play at all — and, when `outputChannels`
+        /// is lower than `channels`, comes out with fewer channels than it went in with.
+        case audioNeedsTranscode(codec: String, channels: Int, outputChannels: Int)
         case atmosPreserved
         case atmosLost
         case dolbyVisionWouldFlatten
@@ -310,7 +312,9 @@ struct ConversionPlan: Sendable, Identifiable, Equatable {
             notes.append(.atmosLost)
         }
         if let main = selection.audio.first(where: \.isDefault), !main.isCopy {
-            notes.append(.audioNeedsTranscode(codec: main.track.codec, channels: main.track.channels))
+            notes.append(.audioNeedsTranscode(codec: main.track.codec,
+                                              channels: main.track.channels,
+                                              outputChannels: main.outputChannels))
         }
 
         if source.dolbyVision != nil, !canRebuildDolbyVision {
@@ -379,19 +383,31 @@ struct ConversionCalibration: Sendable, Equatable, Codable {
     var rewrapSecondsPerGigabyte: Double
     /// Seconds per gigabyte of *source* to lift the Dolby Vision metadata out of it.
     var rpuSecondsPerGigabyte: Double
-    /// How many finished conversions have fed into these numbers.
-    var samples: Int
+    /// How many real conversions have fed into each rate, counted separately.
+    ///
+    /// Separately because a finished job only measures the rates it exercised: a rewrap says
+    /// nothing about encoding speed. A single shared counter lets a rewrap age the *encode* rate
+    /// out of its replacement — the one number a queue of features is almost entirely made of.
+    var encodeSamples: Int = 0
+    var muxSamples: Int = 0
+    var rewrapSamples: Int = 0
 
     static let storageKey = "conversionCalibration"
 
     /// Measured on this Mac: 179,328 frames at 3840×1608 encoded in 234 minutes, then 95 minutes to
     /// inject and mux 22.9 GB.
+    ///
+    /// Every count is zero, which is the point: these are a starting guess, not an observation to
+    /// be averaged against. That distinction is worth the field. Seeded as one sample, this rate
+    /// keeps half the weight of the first real job and a third of the second, and it was taken
+    /// while the Mac was busy with something else — which is how a batch of four films came in at
+    /// 12h57m against a prediction of 22h10m, every one of them wrong in the same direction. A
+    /// guess that survives contact with measurement isn't calibration.
     static let measured = ConversionCalibration(
         pixelsPerSecond: 78_900_000,
         muxSecondsPerGigabyte: 249,
         rewrapSecondsPerGigabyte: 60,
-        rpuSecondsPerGigabyte: 8,
-        samples: 1
+        rpuSecondsPerGigabyte: 8
     )
 
     static var current: ConversionCalibration {
@@ -420,21 +436,29 @@ struct ConversionCalibration: Sendable, Equatable, Codable {
     ///
     /// A running mean rather than a replacement: one job on battery, or against a busy disk, is a
     /// real measurement of an unusual day and shouldn't throw the estimates for everything after
-    /// it. Each argument is optional because a finished job only measures the rates it exercised —
-    /// a rewrap says nothing about encoding speed, and pretending otherwise would poison the number
-    /// that matters most.
+    /// it. The first real measurement of a rate is the exception — it *replaces* the seed outright,
+    /// because a guess isn't an observation and averaging against one only spreads it out.
+    ///
+    /// Each argument is optional because a finished job only measures the rates it exercised, and
+    /// each rate carries its own count so an unexercised one keeps its place in the queue.
     func blending(pixelsPerSecond: Double? = nil, muxSecondsPerGigabyte: Double? = nil,
                   rewrapSecondsPerGigabyte: Double? = nil) -> ConversionCalibration {
-        let weight = 1 / Double(samples + 1)
-        func blend(_ old: Double, _ new: Double?) -> Double {
+        func blend(_ old: Double, _ new: Double?, _ count: Int) -> Double {
             guard let new, new.isFinite, new > 0 else { return old }
+            // At zero samples the weight is 1 and the seed is simply overwritten.
+            let weight = 1 / Double(count + 1)
             return old * (1 - weight) + new * weight
         }
+        func counted(_ count: Int, _ new: Double?) -> Int {
+            (new?.isFinite == true && (new ?? 0) > 0) ? count + 1 : count
+        }
         var updated = self
-        updated.pixelsPerSecond = blend(self.pixelsPerSecond, pixelsPerSecond)
-        updated.muxSecondsPerGigabyte = blend(self.muxSecondsPerGigabyte, muxSecondsPerGigabyte)
-        updated.rewrapSecondsPerGigabyte = blend(self.rewrapSecondsPerGigabyte, rewrapSecondsPerGigabyte)
-        updated.samples = samples + 1
+        updated.pixelsPerSecond = blend(self.pixelsPerSecond, pixelsPerSecond, encodeSamples)
+        updated.muxSecondsPerGigabyte = blend(self.muxSecondsPerGigabyte, muxSecondsPerGigabyte, muxSamples)
+        updated.rewrapSecondsPerGigabyte = blend(self.rewrapSecondsPerGigabyte, rewrapSecondsPerGigabyte, rewrapSamples)
+        updated.encodeSamples = counted(encodeSamples, pixelsPerSecond)
+        updated.muxSamples = counted(muxSamples, muxSecondsPerGigabyte)
+        updated.rewrapSamples = counted(rewrapSamples, rewrapSecondsPerGigabyte)
         return updated
     }
 }
