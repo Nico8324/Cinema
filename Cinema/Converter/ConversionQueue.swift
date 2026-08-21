@@ -8,6 +8,7 @@ The order to convert a folder of films in, and why that order changes as it goes
 #if os(macOS)
 import Foundation
 import Observation
+import os
 
 private extension Duration {
     var seconds: Double { Double(components.seconds) + Double(components.attoseconds) / 1e18 }
@@ -26,6 +27,9 @@ private extension Duration {
 @Observable
 @MainActor
 final class ConversionQueue {
+    nonisolated static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Cinema",
+                                           category: "Conversion")
+
     /// The planned conversions, shortest estimate first.
     private(set) var plans: [ConversionPlan] = []
     /// Files that couldn't be planned, and why — an unreadable file is worth saying out loud
@@ -43,6 +47,11 @@ final class ConversionQueue {
     private var currentProcess: Process?
     private var work: Task<Void, Never>?
 
+    /// Called when the queue runs dry, so the library can pick up what was just made. Without it a
+    /// film converted while the app was running stays invisible until the next launch — the folder
+    /// gained an MP4 and nothing asked the library to look.
+    var onFinished: (@MainActor () -> Void)?
+
     var isConverting: Bool { work != nil }
 
     struct Running: Equatable {
@@ -58,12 +67,25 @@ final class ConversionQueue {
         let estimated: Double
         let outputBytes: Int64
         let error: String?
+        /// Whether the source went to the Trash afterwards, so the screen can say so. A file that
+        /// left the folder without the person being told is the thing this exists to prevent.
+        var originalTrashed = false
     }
 
     struct Progress: Equatable {
         var planned: Int
         var total: Int
         var current: String
+    }
+
+    /// Whether a source is moved to the Trash once its conversion has been verified.
+    ///
+    /// **The Trash, never a delete.** A conversion is one generation of loss and a judgement about
+    /// bitrate; if either turns out wrong, the only way back is the file it came from. The Trash is
+    /// what makes that recoverable by the person rather than by a backup.
+    nonisolated static let trashesOriginalsKey = "trashesOriginalsAfterConverting"
+    nonisolated static var trashesOriginals: Bool {
+        UserDefaults.standard.bool(forKey: trashesOriginalsKey)
     }
 
     /// Extensions worth offering to convert. MP4 and M4V are already the destination.
@@ -132,9 +154,11 @@ final class ConversionQueue {
     }
 
     private func finishRunning() {
+        let didWork = !finished.isEmpty
         work = nil
         running = nil
         currentProcess = nil
+        if didWork { onFinished?() }
     }
 
     private func convert(_ plan: ConversionPlan, preferredAudioLanguage: String?) async {
@@ -149,9 +173,11 @@ final class ConversionQueue {
                 onProgress: { [weak self] fraction in self?.running?.fraction = fraction })
 
             let elapsed = (ContinuousClock.now - started).seconds
+            let trashed = Self.trashOriginal(of: plan)
             finished.insert(Finished(id: plan.id, name: plan.source.url.lastPathComponent,
                                      elapsed: elapsed, estimated: plan.estimate.total,
-                                     outputBytes: outcome.outputBytes, error: nil), at: 0)
+                                     outputBytes: outcome.outputBytes, error: nil,
+                                     originalTrashed: trashed), at: 0)
             recordCompletion(of: plan, encodeSeconds: outcome.encodeSeconds,
                              finishSeconds: outcome.finishSeconds, outputBytes: outcome.outputBytes)
         } catch is CancellationError {
@@ -162,10 +188,34 @@ final class ConversionQueue {
             finished.insert(Finished(id: plan.id, name: plan.source.url.lastPathComponent,
                                      elapsed: (ContinuousClock.now - started).seconds,
                                      estimated: plan.estimate.total, outputBytes: 0,
-                                     error: error.localizedDescription), at: 0)
+                                     error: error.localizedDescription,
+                                     originalTrashed: false), at: 0)
             plans.removeAll { $0.id == plan.id }
         }
         running = nil
+    }
+
+    /// Moves a converted source to the Trash, if that's been asked for.
+    ///
+    /// Only ever reached after `ConversionRunner.run` returned without throwing, which means the
+    /// output rendered a real frame, parsed end to end under a stricter reader, carried the Dolby
+    /// Vision an Apple device accepts and matched the source frame for frame. Anything less and the
+    /// output has already been deleted and this line never runs — the original outlives every
+    /// failure by construction.
+    ///
+    /// `trashItem`, never `removeItem`. The difference is whether a wrong judgement about bitrate
+    /// is recoverable by the person who made it.
+    private static func trashOriginal(of plan: ConversionPlan) -> Bool {
+        guard trashesOriginals else { return false }
+        do {
+            try FileManager.default.trashItem(at: plan.source.url, resultingItemURL: nil)
+            return true
+        } catch {
+            // Not fatal, and not silent either: the conversion succeeded and the file is good. A
+            // source that couldn't be moved is a tidiness problem, not a data problem.
+            logger.error("Couldn't trash \(plan.source.url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return false
+        }
     }
 
     /// Folds a finished conversion into the machine's measured rates and re-orders what's left.

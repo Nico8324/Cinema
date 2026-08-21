@@ -29,6 +29,8 @@ struct SettingsView: View {
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     @AppStorage(ConversionPlan.cropCostingAnEncodeKey) private var cropsWhenItCostsAnEncode = false
+    @AppStorage(AutomaticConversion.enabledKey) private var convertsAutomatically = false
+    @AppStorage(ConversionQueue.trashesOriginalsKey) private var trashesOriginals = false
     @AppStorage(ConversionPlan.keepsSourceQualityKey) private var keepsSourceQuality = false
     @AppStorage(TrackPlan.singleLanguageKey) private var keepsOnlyOriginalLanguage = true
     #endif
@@ -269,6 +271,9 @@ struct SettingsView: View {
                             .disabled(didCopyInstallCommand)
                         }
                     }
+                    Toggle("Convert Automatically", isOn: $convertsAutomatically)
+                    Toggle("Move Originals to Trash", isOn: $trashesOriginals)
+                        .disabled(!convertsAutomatically)
                     Toggle("Keep Original Quality", isOn: $keepsSourceQuality)
                     Toggle("One Language Only", isOn: $keepsOnlyOriginalLanguage)
                     Toggle("Crop Black Bars", isOn: $cropsWhenItCostsAnEncode)
@@ -297,6 +302,17 @@ struct SettingsView: View {
                         Crop Black Bars re-encodes widescreen films that could otherwise be copied straight \
                         across. Copying keeps the picture exactly as the studio mastered it and takes minutes; \
                         cropping gives a frame without bars and takes hours.
+                        
+                        Convert Automatically converts anything you drop into the media folder without \
+                        being asked, one film at a time. It’s off to begin with, because a conversion \
+                        takes hours and makes choices about your films — the queue window shows what \
+                        those choices would be, and it’s worth reading a few before leaving it running.
+                        
+                        Move Originals to Trash puts each source in the Trash once its converted copy \
+                        has been checked for a picture that renders, a container that parses, Dolby \
+                        Vision an Apple device accepts, and frame-for-frame parity. A conversion that \
+                        fails any of those deletes itself and leaves the original where it is. Nothing \
+                        is ever deleted outright, so the Trash is your way back.
                         """)
                 }
                 #endif

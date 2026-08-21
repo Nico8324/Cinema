@@ -500,6 +500,38 @@ struct ConversionPlanningTests {
         #expect(arguments.contains("default+forced"))
     }
 
+    // MARK: - Automatic conversion
+
+    /// Both of these are off until someone turns them on, and the test exists because a default is
+    /// the one setting nobody chooses. Converting spends hours of the machine unattended, and
+    /// trashing moves a file the person may still want — neither is a state to discover you were
+    /// already in.
+    @Test func convertingAutomaticallyAndTrashingAreBothOffUntilAskedFor() {
+        UserDefaults.standard.removeObject(forKey: AutomaticConversion.enabledKey)
+        UserDefaults.standard.removeObject(forKey: ConversionQueue.trashesOriginalsKey)
+        #expect(!AutomaticConversion.isEnabled)
+        #expect(!ConversionQueue.trashesOriginals)
+    }
+
+    /// A source is moved rather than removed, so a wrong judgement about bitrate stays recoverable
+    /// by the person who made it. `trashItem` puts the file somewhere they can reach; `removeItem`
+    /// puts it nowhere.
+    @Test func anOriginalGoesToTheTrashAndNotIntoNothing() throws {
+        let folder = URL.temporaryDirectory.appending(path: "trash-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let original = folder.appending(path: "Film.mkv")
+        try Data("not really a film".utf8).write(to: original)
+
+        var trashed: NSURL?
+        try FileManager.default.trashItem(at: original, resultingItemURL: &trashed)
+
+        #expect(!FileManager.default.fileExists(atPath: original.path(percentEncoded: false)))
+        let recovered = try #require(trashed as URL?)
+        #expect(FileManager.default.fileExists(atPath: recovered.path(percentEncoded: false)))
+        try? FileManager.default.removeItem(at: recovered)
+    }
+
     // MARK: - Calibration
 
     /// One job on battery, or against a busy disk, is a real measurement of an unusual day. It

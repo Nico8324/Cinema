@@ -29,6 +29,11 @@ struct Cinema: App {
     @State private var immersionStyle: any ImmersionStyle = .progressive
     #endif
 
+    #if os(macOS)
+    @State private var automaticConversion = AutomaticConversion()
+    @AppStorage(AutomaticConversion.enabledKey) private var automaticallyConverts = false
+    #endif
+
     var body: some Scene {
         // The app's primary content window.
         WindowGroup {
@@ -46,6 +51,27 @@ struct Cinema: App {
                 .task {
                     guard let folder = MediaFolderScanner.folderURL else { return }
                     _ = await MediaFolderScanner.scan(folder: folder, into: modelContainer.mainContext)
+                    // Then, if it's been asked for, convert whatever the library couldn't take —
+                    // after the scan rather than before, so a film converted on a previous run is
+                    // already in the library and isn't planned a second time.
+                    automaticConversion.start(folder: folder) {
+                        Task {
+                            _ = await MediaFolderScanner.scan(folder: folder,
+                                                              into: modelContainer.mainContext)
+                        }
+                    }
+                }
+                .onChange(of: automaticallyConverts) { _, isOn in
+                    guard isOn, let folder = MediaFolderScanner.folderURL else {
+                        automaticConversion.stop()
+                        return
+                    }
+                    automaticConversion.start(folder: folder) {
+                        Task {
+                            _ = await MediaFolderScanner.scan(folder: folder,
+                                                              into: modelContainer.mainContext)
+                        }
+                    }
                 }
                 #endif
                 // Set minimum window size

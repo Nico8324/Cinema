@@ -105,7 +105,9 @@ struct ConversionQueueView: View {
                             if let error = item.error {
                                 Text(error).foregroundStyle(.orange)
                             } else {
-                                Text("\(ConversionQueueView.time(item.elapsed)) · \(item.outputBytes.formatted(.byteCount(style: .file)))")
+                                Text(item.originalTrashed
+                                     ? String(localized: "\(ConversionQueueView.time(item.elapsed)) · \(item.outputBytes.formatted(.byteCount(style: .file))) · original in Trash")
+                                     : String(localized: "\(ConversionQueueView.time(item.elapsed)) · \(item.outputBytes.formatted(.byteCount(style: .file)))"))
                                     .foregroundStyle(.secondary)
                                     .monospacedDigit()
                             }
