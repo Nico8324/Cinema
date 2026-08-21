@@ -230,6 +230,9 @@ struct DetailView: View {
     private func deleteVideo() {
         dismiss()
         Task {
+            // The player must let go first: it holds the model and keeps writing progress
+            // to it on a timer, which traps once the row is deleted.
+            player.videoWillBeDeleted(video)
             video.removeLocalFiles()
             context.delete(video)
             Genre.deleteOrphaned(in: context)

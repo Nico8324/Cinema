@@ -13,6 +13,7 @@ import UniformTypeIdentifiers
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
+    @Environment(PlayerModel.self) private var player
 
     @Query private var videos: [Video]
 
@@ -427,8 +428,17 @@ struct SettingsView: View {
     /// Deletes every video from the library, including the locally imported files and thumbnails backing them.
     private func clearLibrary() {
         for video in videos {
+            // The player writes progress to its loaded video on a timer; deleting that row
+            // without telling it traps within seconds.
+            player.videoWillBeDeleted(video)
             video.removeLocalFiles()
             context.delete(video)
+        }
+        // A cleared library keeps no series either — a Show row is meaningless without the
+        // possibility of the episodes it groups, and stale rows would hand a future re-import
+        // an identity it never asked for.
+        for show in (try? context.fetch(FetchDescriptor<Show>())) ?? [] {
+            context.delete(show)
         }
         Genre.deleteOrphaned(in: context)
         context.saveReportingErrors()

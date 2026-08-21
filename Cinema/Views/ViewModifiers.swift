@@ -145,12 +145,31 @@ private struct TransitionSourceModifier: ViewModifier {
 private struct OpenVideoPlayerModifier: ViewModifier {
     @Environment(PlayerModel.self) private var player
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismissWindow) private var dismissWindow
 
     func body(content: Content) -> some View {
         content
             .onChange(of: player.presentation, { oldValue, newValue in
                 if newValue == .fullWindow {
                     openWindow(id: PlayerView.identifier)
+                }
+            })
+            // Playing a second video while the window is already open doesn't change the
+            // presentation, so the change above never fires: the item swapped in paused,
+            // behind an unfocused window. Fronting the window and playing here covers the
+            // swap; the fresh-open case (oldID == nil) keeps its autoplay in the window's
+            // own onAppear.
+            .onChange(of: player.currentItem?.id, { oldID, newID in
+                guard player.presentation == .fullWindow else { return }
+                if oldID != nil, newID != nil, oldID != newID {
+                    openWindow(id: PlayerView.identifier)
+                    if player.shouldAutoPlay {
+                        player.play()
+                    }
+                } else if newID == nil {
+                    // The loaded video was deleted out from under the player; an open
+                    // window showing an empty player is not a state worth keeping.
+                    dismissWindow(id: PlayerView.identifier)
                 }
             })
     }

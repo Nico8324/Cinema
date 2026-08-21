@@ -119,6 +119,7 @@ struct Cinema: App {
         // Mac app puts them, rather than in a sheet over the library.
         Settings {
             SettingsView()
+                .environment(player)
                 .modelContainer(modelContainer)
         }
         #endif
@@ -167,6 +168,12 @@ struct Cinema: App {
             return
         }
 
+        #if os(macOS)
+        // Move the media directories into the app's own root before anything reads the store —
+        // the reconciler below judging rows against a still-empty new root would strand every
+        // imported file.
+        MediaStore.migrateLegacySharedDirectoriesIfNeeded()
+        #endif
         let modelContainer = Self.makeModelContainer()
         self.modelContainer = modelContainer
         self._player = State(initialValue: PlayerModel(modelContainer: modelContainer))

@@ -191,8 +191,13 @@ enum Presentation {
 
         // Observe this notification to identify when a video plays to its end.
         observationTasks.append(Task { [weak self] in
-            for await _ in center.notifications(named: .AVPlayerItemDidPlayToEndTime) {
+            for await notification in center.notifications(named: .AVPlayerItemDidPlayToEndTime) {
                 guard let self else { return }
+                // Only this player's own item counts. The notification fires for every
+                // AVPlayerItem in the process — including the trailer player's — and a trailer
+                // finishing must not clear the loaded movie's resume point.
+                guard let item = notification.object as? AVPlayerItem,
+                      item === self.player.currentItem else { continue }
                 // A finished video has nothing left to "continue watching" — clear its saved position.
                 self.currentItem?.playbackPosition = 0
                 self.modelContext.saveReportingErrors()
@@ -335,8 +340,12 @@ enum Presentation {
     /// and re-seeking on every change would fight a person scrubbing through the video.
     private func performOneTimeSeekIfNeeded() {
         guard !hasSeekedForCurrentItem, let video = currentItem else { return }
+        // Latch on the first status change whether or not a seek happens. A video started
+        // fresh has nothing to resume, but leaving the guard unlatched meant that once the
+        // periodic saver pushed its position past the partially-watched threshold, the next
+        // pause or stall would "resume" it backwards to the last saved position.
+        hasSeekedForCurrentItem = true
         if video.isPartiallyWatched {
-            hasSeekedForCurrentItem = true
             player.seek(to: CMTime(seconds: video.playbackPosition, preferredTimescale: 600))
         }
     }
@@ -350,6 +359,21 @@ enum Presentation {
         currentItem.playbackPosition = seconds
         currentItem.lastWatchedDate = Date()
         modelContext.saveReportingErrors()
+    }
+
+    /// Lets go of a video that is about to be deleted from the library.
+    ///
+    /// Called *before* the model row is deleted. The player otherwise keeps its reference,
+    /// and the periodic progress saver — or a pause, or play-to-end — would write to the
+    /// invalidated model within seconds and trap. Progress is deliberately not saved here:
+    /// the row it would be saved to is the one being destroyed.
+    func videoWillBeDeleted(_ video: Video) {
+        guard currentItem === video else { return }
+        currentItem = nil
+        // A Picture in Picture window can't outlive its item; clear the ownership flag so
+        // `reset()` performs a real teardown instead of deferring to the floating window.
+        isPictureInPictureActive = false
+        reset()
     }
 
     /// Clears any loaded media and resets the player model to its default state.
