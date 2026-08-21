@@ -560,6 +560,27 @@ struct ConversionPlanningTests {
         #expect(OutputName.stem(forConverting: episode, year: 2011) == "Suits S01E01")
     }
 
+    /// `yearOfRelease` is never empty — a scan that finds no year in the filename stores the
+    /// current one — so an unmatched video reads as this year. Writing that into a filename isn't
+    /// a guess someone can see and correct, it's a fabricated fact stamped onto their file.
+    @MainActor
+    @Test func onlyAMatchedFilmLendsItsYearToAFilename() throws {
+        let context = try TestSupport.freshContext()
+        let matched = Video(name: "Sinners", synopsis: "",
+                            externalPath: "/m/Sinners.mp4", yearOfRelease: 2025)
+        matched.tmdbID = 1233413
+        // Never matched: its year is the year it was scanned, and means nothing about the film.
+        let unmatched = Video(name: "Trailer", synopsis: "",
+                              externalPath: "/m/Trailer.mp4", yearOfRelease: 2026)
+        context.insert(matched)
+        context.insert(unmatched)
+        try context.save()
+
+        let years = MediaFolderTidy.knownYears(in: context)
+        #expect(years["/m/Sinners.mp4"] == 2025)
+        #expect(years["/m/Trailer.mp4"] == nil)
+    }
+
     /// The year must not enter identity, because it arrives from two different places. Once a film
     /// is matched and tidied to `Sinners (2025).mp4`, an identity that moved with it would stop
     /// recognising `Sinners_AEBB6DBE.mkv` as already converted — and re-encode it, unattended, for

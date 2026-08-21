@@ -128,12 +128,24 @@ enum MediaFolderTidy {
         return (moved, failed)
     }
 
-    /// What the library knows about each file's year, keyed the way `plannedMoves` looks it up.
+    /// What the library *actually knows* about each file's year, keyed the way `plannedMoves`
+    /// looks it up.
+    ///
+    /// **Only a matched film counts.** `yearOfRelease` is never empty: a scan that finds no year in
+    /// the filename stores the current year, so every unmatched video in this library reads 2026 —
+    /// including a YouTube trailer. Writing that into a filename would not be a guess a person
+    /// could see and correct, it would be a fabricated fact stamped permanently onto their file.
+    ///
+    /// A TMDB match is the only evidence that the number came from the film rather than from the
+    /// clock. Where there is no match, the filename's own year is used if it has one, and otherwise
+    /// the name simply carries no year — which is honest and reversible.
     @MainActor
     static func knownYears(in context: ModelContext) -> [String: Int] {
         let videos = (try? context.fetch(FetchDescriptor<Video>())) ?? []
         return videos.reduce(into: [:]) { years, video in
-            guard let path = video.externalPath, video.yearOfRelease > 0 else { return }
+            guard let path = video.externalPath,
+                  video.tmdbID != nil,
+                  video.yearOfRelease > 0 else { return }
             years[resolved(path)] = video.yearOfRelease
         }
     }
