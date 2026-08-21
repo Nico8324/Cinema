@@ -20,6 +20,10 @@ struct LibraryView: View {
     @Query(sort: \Genre.name)
     private var genres: [Genre]
 
+    /// The series rows, for card titles: a show's card is named by its own row — the name a
+    /// TMDB match maintains — not by whichever episode happens to sort first.
+    @Query private var shows: [Show]
+
     @Namespace private var namespace
 
     @AppStorage(ArtworkStyle.storageKey) private var artworkStyle: ArtworkStyle = .wide
@@ -64,36 +68,44 @@ struct LibraryView: View {
     /// One grid cell: a movie, or a whole show collapsed into a single card.
     private enum LibraryItem: Identifiable {
         case movie(Video)
-        case show(name: String, episodes: [Video])
+        /// `name` is a raw grouping name (a spelling some filename used), which is what
+        /// navigation keys on; `title` is what the card shows — the Show row's own name,
+        /// which is the one a TMDB match is allowed to change.
+        case show(name: String, title: String, episodes: [Video])
 
         var id: String {
             switch self {
             case .movie(let video): video.uuid.uuidString
-            case .show(let name, _): "show-\(name)"
+            case .show(let name, _, _): "show-\(Show.key(for: name))"
             }
         }
 
         var sortKey: String {
             switch self {
             case .movie(let video): video.name
-            // Sort and display by the official title once matched; the
-            // associated name stays the stable grouping key.
-            case .show(let name, let episodes): episodes.first?.name ?? name
+            case .show(_, let title, _): title
             }
         }
     }
 
     /// The grid's cards for the selected type — movies, or shows with a show's
     /// episodes grouped into one card — sorted alphabetically.
+    ///
+    /// Shows group by `Show.key`, not by the raw string: `Suits` and `suits.` are one series
+    /// and must be one card, which is the entire reason the insensitive key exists. Grouping by
+    /// the raw name put the split the model had already healed straight back on screen.
     private var libraryItems: [LibraryItem] {
         let videos = selectedGenre?.videos ?? allVideos
+        let showsByKey = Dictionary(grouping: shows, by: \.sortKey)
         let items: [LibraryItem] = switch filter {
         case .movies:
             videos.filter { !$0.isEpisode }.map(LibraryItem.movie)
         case .shows:
-            Dictionary(grouping: videos.filter(\.isEpisode)) { $0.showName ?? "" }
-                .map { name, episodes in
-                    LibraryItem.show(name: name, episodes: episodes.sorted {
+            Dictionary(grouping: videos.filter(\.isEpisode)) { Show.key(for: $0.showName ?? "") }
+                .map { key, episodes in
+                    let name = episodes.first?.showName ?? ""
+                    let title = showsByKey[key]?.first?.name ?? episodes.first?.name ?? name
+                    return LibraryItem.show(name: name, title: title, episodes: episodes.sorted {
                         ($0.seasonNumber ?? 0, $0.episodeNumber ?? 0) < ($1.seasonNumber ?? 0, $1.episodeNumber ?? 0)
                     })
                 }
@@ -156,12 +168,12 @@ struct LibraryView: View {
                                         .accessibilityLabel(video.name)
                                         .buttonStyle(.plain)
 
-                                    case .show(let name, let episodes):
+                                    case .show(let name, let title, let episodes):
                                         NavigationLink(value: NavigationNode.show(name)) {
-                                            ShowCardView(name: episodes.first?.name ?? name, episodes: episodes,
+                                            ShowCardView(name: title, episodes: episodes,
                                                      style: artworkStyle)
                                         }
-                                        .accessibilityLabel(episodes.first?.name ?? name)
+                                        .accessibilityLabel(title)
                                         .buttonStyle(.plain)
                                     }
                                 }
@@ -298,7 +310,9 @@ struct LibraryView: View {
 
 /// A grid card for a whole show: the first episode's art with an episode-count
 /// badge, in the same visual language as the movie cards.
-private struct ShowCardView: View {
+// Internal rather than private: Search collapses a show's episodes into this same card, and a
+// second hand-rolled show card would drift from this one the first time either changes.
+struct ShowCardView: View {
     let name: String
     let episodes: [Video]
     var style: ArtworkStyle = .wide

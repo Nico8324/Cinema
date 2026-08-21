@@ -51,8 +51,14 @@ enum ShowReconciler {
         let created = ((try? context.fetchCount(FetchDescriptor<Show>())) ?? 0) - before
 
         if attached > 0 {
-            try? context.save()
-            logger.notice("Attached \(attached, privacy: .public) episode(s) to \(created, privacy: .public) new series.")
+            do {
+                try context.save()
+                logger.notice("Attached \(attached, privacy: .public) episode(s) to \(created, privacy: .public) new series.")
+            } catch {
+                // Self-healing at the next launch, but never silent: a save that quietly fails
+                // every launch is indistinguishable from the backfill never running.
+                logger.error("Couldn't save the show backfill: \(error.localizedDescription)")
+            }
         }
         return (attached, created)
     }

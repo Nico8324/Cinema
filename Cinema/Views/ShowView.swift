@@ -25,11 +25,15 @@ struct ShowView: View {
 
     init(showName: String) {
         self.showName = showName
+        let key = Show.key(for: showName)
+        // Matched on the show's normalized identity, with the raw string as a fallback for an
+        // episode that hasn't been attached yet. An exact-string filter alone meant `Suits` and
+        // `suits.` each got a page listing only its own episodes — the exact split the Show
+        // row's insensitive key exists to prevent.
         self._episodes = Query(
-            filter: #Predicate<Video> { $0.showName == showName },
+            filter: #Predicate<Video> { $0.show?.sortKey == key || $0.showName == showName },
             sort: [SortDescriptor(\Video.seasonNumber), SortDescriptor(\Video.episodeNumber)]
         )
-        let key = Show.key(for: showName)
         self._shows = Query(filter: #Predicate<Show> { $0.sortKey == key })
     }
 

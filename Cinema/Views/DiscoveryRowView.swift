@@ -120,6 +120,7 @@ private struct DiscoveryPosterCard: View {
 /// playing inline through the same player the library's trailers use.
 private struct DiscoveryMovieSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Namespace private var namespace
 
     let movie: TMDB.Movie
 
@@ -138,9 +139,9 @@ private struct DiscoveryMovieSheet: View {
                 .navigationDestination(for: TMDB.Movie.self) { pushed in
                     MoviePageView(movie: pushed)
                 }
-                .navigationDestination(for: Video.self) { video in
-                    DetailView(video: video)
-                }
+                // Owned titles push by stable identity, never by model object — a pushed page
+                // holding a live `Video` faults if the row is deleted beneath it.
+                .navigationDestinationVideo(in: namespace)
         }
         // Steps aside when playback starts; the app's root presents the player.
         .dismissesForFullWindowPlayback()

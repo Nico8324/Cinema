@@ -32,11 +32,9 @@ struct PersonSheet: View {
                 .navigationDestination(for: TMDB.Show.self) { show in
                     ShowPageView(show: show)
                 }
-                // Owned movies open the library's own page…
-                .navigationDestination(for: Video.self) { video in
-                    DetailView(video: video)
-                }
-                // …and owned shows the library's show page, episodes included.
+                // Owned titles push by stable identity (`NavigationNode`), never by model
+                // object — a pushed page holding a live `Video` faults if the row is deleted
+                // beneath it, which is NavigationNode's whole reason to exist.
                 .navigationDestinationVideo(in: namespace)
         }
         // …so this sheet steps aside when playback starts and the app's
@@ -186,7 +184,7 @@ private struct PersonPageView: View {
                             switch credit {
                             case .movie(let movieCredit):
                                 if let ownedVideo = matchedVideos.first(where: { $0.tmdbID == movieCredit.id }) {
-                                    NavigationLink(value: ownedVideo) {
+                                    NavigationLink(value: NavigationNode.video(ownedVideo.id)) {
                                         FilmographyRow(credit: credit, isInLibrary: true)
                                     }
                                     .buttonStyle(.plain)

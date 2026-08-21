@@ -29,8 +29,16 @@ struct EditVideoView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Title") {
+                Section {
                     TextField("Title", text: $video.name)
+                } header: {
+                    Text("Title")
+                } footer: {
+                    // Said before it happens rather than discovered after: this field is
+                    // show-level for episodes, and renaming "one episode" renames the series.
+                    if video.isEpisode {
+                        Text("Episodes share their show’s title — this renames the whole show.")
+                    }
                 }
 
                 Section("Synopsis") {
@@ -82,6 +90,15 @@ struct EditVideoView: View {
                         // A hand-edit outranks TMDB from here on: background refreshes skip
                         // the editable fields while this is set, so the correction survives.
                         video.userEditedMetadata = true
+                        // For an episode, "Title" is the show's shared display title — every
+                        // sibling was renamed together by the match, and an edit that renamed
+                        // only one would leave the show's cards disagreeing with each other.
+                        if video.isEpisode, let show = video.show {
+                            show.name = video.name
+                            for episode in show.episodes ?? [] where episode.name != video.name {
+                                episode.name = video.name
+                            }
+                        }
                         // Sweep genres the edit may have emptied, so the Library's
                         // filter row doesn't accumulate dead pills.
                         Genre.deleteOrphaned(in: context)

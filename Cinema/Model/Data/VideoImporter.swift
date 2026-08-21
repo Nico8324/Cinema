@@ -273,8 +273,10 @@ enum VideoImporter {
         let watchURL = YouTubeSource.watchURL(forVideoID: videoID)
 
         // The library is small; an in-memory duplicate check keeps URL comparison simple.
-        let existing = try? context.fetch(FetchDescriptor<Video>())
-        if let duplicate = existing?.first(where: { $0.remoteURL == watchURL }) {
+        // `try`, not `try?`: a failed fetch can't prove the video is new, and swallowing it
+        // would admit a duplicate row on exactly the launches something is already wrong.
+        let existing = try context.fetch(FetchDescriptor<Video>())
+        if let duplicate = existing.first(where: { $0.remoteURL == watchURL }) {
             throw ImportError.alreadyInLibrary(duplicate.name)
         }
 

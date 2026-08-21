@@ -66,9 +66,18 @@ final class Show {
     /// which episode a fetch happened to return first. That dependence is the bug this model was
     /// built to remove, and it would have crept back in through the name.
     static func preferredName(between first: String, and second: String) -> String {
-        let firstHasCapital = first != first.lowercased()
-        let secondHasCapital = second != second.lowercased()
-        if firstHasCapital != secondHasCapital { return firstHasCapital ? first : second }
+        // Mixed case beats ALL CAPS beats lowercase: a capital is evidence someone typed the
+        // name, but a release group's `ANDOR` is a convention, not a spelling — and since
+        // `findOrCreate` re-runs this against the stored name on every import, an all-caps
+        // filename would otherwise shout over the title for good.
+        func score(_ name: String) -> Int {
+            let hasCapital = name != name.lowercased()
+            guard hasCapital else { return 0 }
+            return name == name.uppercased() ? 1 : 2
+        }
+        let firstScore = score(first)
+        let secondScore = score(second)
+        if firstScore != secondScore { return firstScore > secondScore ? first : second }
         return first <= second ? first : second
     }
 
@@ -97,11 +106,18 @@ final class Show {
 
         var descriptor = FetchDescriptor<Show>(predicate: #Predicate { $0.sortKey == key })
         descriptor.fetchLimit = 1
-        if let existing = try? context.fetch(descriptor).first {
-            // A better spelling of a name already seen improves the label without touching the
-            // identity — which is what makes the result independent of fetch order.
-            existing.name = preferredName(between: existing.name, and: trimmed)
-            return existing
+        do {
+            if let existing = try context.fetch(descriptor).first {
+                // A better spelling of a name already seen improves the label without touching
+                // the identity — which is what makes the result independent of fetch order.
+                existing.name = preferredName(between: existing.name, and: trimmed)
+                return existing
+            }
+        } catch {
+            // A failed lookup must not mint a row: the series may exist, and a duplicate is the
+            // exact bug this method exists to prevent. An unattached episode is the safe
+            // failure — the reconciler attaches it at the next launch.
+            return nil
         }
 
         let show = Show(name: trimmed)
