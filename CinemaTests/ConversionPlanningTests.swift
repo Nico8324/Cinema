@@ -573,6 +573,54 @@ struct ConversionPlanningTests {
         #expect(!stem.isEmpty)
     }
 
+    // MARK: - Tidying the media folder
+
+    /// What the tidy pass would do to a folder converted before the naming rules existed.
+    @Test func tidyingRenamesConvertedFilesAndFilesEpisodesBySeason() throws {
+        let folder = URL.temporaryDirectory.appending(path: "tidy-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        for name in ["Predator__Badlands_615165C3.mp4", "Suits_S1E1_6E3020AD.mp4",
+                     "Predator__Badlands_615165C3.mkv"] {
+            try Data().write(to: folder.appending(path: name))
+        }
+
+        let moves = MediaFolderTidy.plannedMoves(in: folder)
+        let destinations = Set(moves.map { $0.destination(relativeTo: folder) })
+        #expect(destinations == ["Predator Badlands.mp4", "Suits/Season 01/Suits S01E01.mp4"])
+        // The source is never renamed or moved: it is the way back from a wrong judgement, and it
+        // belongs exactly where its owner left it.
+        #expect(!moves.contains { $0.from.pathExtension == "mkv" })
+    }
+
+    /// A file already named correctly isn't moved onto itself.
+    @Test func tidyingLeavesAlreadyCorrectFilesAlone() throws {
+        let folder = URL.temporaryDirectory.appending(path: "tidy-\(UUID().uuidString)")
+        let season = folder.appending(path: "Suits/Season 01")
+        try FileManager.default.createDirectory(at: season, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try Data().write(to: folder.appending(path: "Sinners (2025).mp4"))
+        try Data().write(to: season.appending(path: "Suits S01E01.mp4"))
+
+        #expect(MediaFolderTidy.plannedMoves(in: folder).isEmpty)
+    }
+
+    /// Two files that parse to one name are both left alone. A film and its extended cut, or two
+    /// rips of one episode, are a real possibility — and the right answer is for a person to look,
+    /// not for the tidy pass to pick a winner and overwrite the loser.
+    @Test func tidyingNeverMovesOneFileOntoAnother() throws {
+        let folder = URL.temporaryDirectory.appending(path: "tidy-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try Data().write(to: folder.appending(path: "Sinners.2025.x265-ONE.mp4"))
+        try Data().write(to: folder.appending(path: "Sinners.2025.x264-TWO.mp4"))
+
+        let moves = MediaFolderTidy.plannedMoves(in: folder)
+        #expect(moves.count == 1)
+        let survivor = try #require(moves.first)
+        #expect(!FileManager.default.fileExists(atPath: survivor.to.path(percentEncoded: false)))
+    }
+
     // MARK: - Automatic conversion
 
     /// Both of these are off until someone turns them on, and the test exists because a default is

@@ -31,6 +31,7 @@ struct SettingsView: View {
     @AppStorage(ConversionPlan.cropCostingAnEncodeKey) private var cropsWhenItCostsAnEncode = false
     @AppStorage(AutomaticConversion.enabledKey) private var convertsAutomatically = false
     @AppStorage(ConversionQueue.trashesOriginalsKey) private var trashesOriginals = false
+    @State private var isTidying = false
     @AppStorage(ConversionPlan.keepsSourceQualityKey) private var keepsSourceQuality = false
     @AppStorage(TrackPlan.singleLanguageKey) private var keepsOnlyOriginalLanguage = true
     #endif
@@ -127,6 +128,11 @@ struct SettingsView: View {
         // Grouped `Form` is the Mac's settings idiom; a `List` there reads as a source list.
         Form { sections }
             .formStyle(.grouped)
+            .sheet(isPresented: $isTidying) {
+                if let folder = MediaFolderScanner.folderURL {
+                    MediaFolderTidyView(folder: folder)
+                }
+            }
         #else
         List { sections }
         #endif
@@ -281,6 +287,8 @@ struct SettingsView: View {
                         openWindow(id: ConversionQueueView.windowID)
                     }
                     .disabled(ConverterTools.readiness == .unavailable || mediaFolderPath.isEmpty)
+                    Button("Tidy Media Folder…") { isTidying = true }
+                        .disabled(mediaFolderPath.isEmpty)
                 } header: {
                     Text("Conversion")
                 } footer: {
@@ -307,6 +315,11 @@ struct SettingsView: View {
                         being asked, one film at a time. It’s off to begin with, because a conversion \
                         takes hours and makes choices about your films — the queue window shows what \
                         those choices would be, and it’s worth reading a few before leaving it running.
+                        
+                        Tidy Media Folder renames videos converted before these rules existed — \
+                        the release group's name becomes the film's, and episodes move into folders \
+                        by show and season. It lists everything it would do first, and updates your \
+                        library so nothing stops playing.
                         
                         Move Originals to Trash puts each source in the Trash once its converted copy \
                         has been checked for a picture that renders, a container that parses, Dolby \
