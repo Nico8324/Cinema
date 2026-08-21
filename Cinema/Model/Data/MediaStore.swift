@@ -22,10 +22,46 @@ enum MediaStore {
         "show-\(showID).jpg"
     }
 
-    /// The container all media directories live under. The app always uses
-    /// Application Support; tests point this at a scratch directory so they
-    /// never touch a real library.
+    /// The container all media directories live under. Tests point this at a scratch
+    /// directory so they never touch a real library.
+    ///
+    /// On the Mac this is an app-named folder rather than Application Support itself, for the
+    /// same reason the SwiftData store moved: the app runs without a sandbox, so the bare
+    /// directory is shared with every other unsandboxed app — and generic names like `Videos`
+    /// are exactly the kind another app would also use. The orphan sweep in `LibraryReconciler`
+    /// deletes files out of `Videos`, which must never happen in a folder that isn't ours.
+    #if os(macOS)
     nonisolated(unsafe) static var rootDirectory: URL = .applicationSupportDirectory
+        .appending(path: "Cinema", directoryHint: .isDirectory)
+    #else
+    nonisolated(unsafe) static var rootDirectory: URL = .applicationSupportDirectory
+    #endif
+
+    #if os(macOS)
+    /// One-time move of the media directories out of the shared Application Support root.
+    ///
+    /// Runs before anything reads or sweeps the store: the reconciler judging rows against a
+    /// still-empty new root would strand every imported file. Each entry moves only if it
+    /// exists at the old location and nothing occupies the new one, so the move can't clobber
+    /// and re-running is a no-op.
+    static func migrateLegacySharedDirectoriesIfNeeded() {
+        let legacyRoot = URL.applicationSupportDirectory
+        let fileManager = FileManager.default
+        try? fileManager.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
+        for name in ["Videos", "Thumbnails", "Posters", "profile.jpg"] {
+            let source = legacyRoot.appending(path: name)
+            let destination = rootDirectory.appending(path: name)
+            guard fileManager.fileExists(atPath: source.path),
+                  !fileManager.fileExists(atPath: destination.path) else { continue }
+            do {
+                try fileManager.moveItem(at: source, to: destination)
+                logger.notice("Moved \(name, privacy: .public) into the app's own media root.")
+            } catch {
+                logger.error("Couldn't move \(name, privacy: .public) into the media root: \(error.localizedDescription)")
+            }
+        }
+    }
+    #endif
 
     /// The directory holding imported video files.
     static var videosDirectory: URL {
