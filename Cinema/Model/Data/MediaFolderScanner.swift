@@ -88,9 +88,22 @@ enum MediaFolderScanner {
     /// Existing entries are matched by path, so rescanning after adding a few films picks up only
     /// the new ones. Titles, season/episode markers and durations are derived exactly as they are
     /// for picked files, so scanned and imported content behaves identically downstream.
+    /// Whether a scan is currently in flight — see the guard in `scan(folder:into:)`.
+    @MainActor
+    private static var isScanning = false
+
     @MainActor
     static func scan(folder: URL, into context: ModelContext) async -> Outcome {
         var outcome = Outcome()
+
+        // One scan at a time. The known-files snapshot is taken once at the start and the scan
+        // suspends repeatedly (thumbnail probes, duration reads), so two interleaved scans —
+        // launch plus the conversion queue draining, say — would each see a new file as unknown
+        // and insert it twice. The caller that was refused loses nothing: the scan already
+        // running is looking at the same folder.
+        guard !isScanning else { return outcome }
+        isScanning = true
+        defer { isScanning = false }
 
         guard FileManager.default.fileExists(atPath: folder.path(percentEncoded: false)) else {
             logger.error("Media folder isn't reachable: \(folder.path(percentEncoded: false))")
@@ -135,12 +148,42 @@ enum MediaFolderScanner {
 
         outcome.alreadyPresent = selection.alreadyPresent
 
+        // Rows whose file vanished from inside this (reachable) folder. The overwhelmingly
+        // likely cause is a rename or a move within the folder — and without this, the renamed
+        // file becomes a second row while the old one stays behind, permanently unplayable and,
+        // by design, never cleaned up. A row from an unplugged drive is out of scope: its path
+        // isn't under this folder, and an absent drive must never cost anyone their metadata.
+        let folderPath = folder.path(percentEncoded: false)
+        var strandedRows = ((try? context.fetch(FetchDescriptor<Video>())) ?? []).filter { video in
+            guard let path = video.externalPath, path.hasPrefix(folderPath) else { return false }
+            return !FileManager.default.fileExists(atPath: path)
+        }
+
         // Only a fallback: a year the filename states beats the year the scan happened.
         let scanYear = Calendar.current.component(.year, from: .now)
         var added: [Video] = []
+        var relinked = 0
 
         for url in selection.new {
             let path = url.path(percentEncoded: false)
+            let duration = await ThumbnailGenerator.duration(for: url)
+
+            // A new file whose exact duration matches exactly one stranded row is that row's
+            // file under a new name: re-point the row and keep its identity, match, playback
+            // position and everything else. Ambiguity (two same-length candidates) falls
+            // through to a fresh row rather than guessing.
+            if duration > 0 {
+                let matches = strandedRows.indices.filter { strandedRows[$0].duration == duration }
+                if matches.count == 1 {
+                    let row = strandedRows.remove(at: matches[0])
+                    row.externalPath = path
+                    relinked += 1
+                    outcome.alreadyPresent += 1
+                    logger.notice("Relinked \(row.name, privacy: .public) to its renamed file.")
+                    continue
+                }
+            }
+
             let parsed = FilenameMetadata.parse(url.deletingPathExtension().lastPathComponent)
             let episode = parsed.episode
             let video = Video(
@@ -149,7 +192,7 @@ enum MediaFolderScanner {
                 synopsis: episode?.showName ?? parsed.title,
                 externalPath: path,
                 yearOfRelease: parsed.year ?? scanYear,
-                duration: await ThumbnailGenerator.duration(for: url),
+                duration: duration,
                 showName: episode?.showName,
                 seasonNumber: episode?.season,
                 episodeNumber: episode?.episode
@@ -165,6 +208,9 @@ enum MediaFolderScanner {
             outcome.added += 1
         }
 
+        if relinked > 0 && added.isEmpty {
+            context.saveReportingErrors()
+        }
         if !added.isEmpty {
             context.saveReportingErrors()
             // Posters come from the files themselves, written into the app's own storage.
