@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-21
+
+Five films converted overnight, and everything the batch got wrong is fixed. A subtitle track is now identified by reading it rather than by trusting what it claims about itself.
+
+### Added
+- **Subtitles that say what they are.** A forced track — the one carrying alien dialogue in a film you otherwise understand — is found even when the source only hints at it in a title, and an SDH track is told apart from an ordinary one even when nothing labels it. Both are decided by reading the cues when the flags and titles fail, which is often: one film declares its forced track only as `BTM FORCED`, and an Italian release labels its *English* deaf-and-hard-of-hearing track `NON UDENTI`.
+- **SDH tracks are named in the picker.** Two identical "English" entries become "English" and "English SDH". Apple's players ignore every label a converter can write, so this is done through AVFoundation itself — the one step in the pipeline no command-line tool can perform. It patches the file's header in about a second and never touches the film.
+- `Tools/sdhmark.swift`, for marking a film that was converted before this existed.
+
+### Changed
+- The audio warning now says what the soundtrack comes out as, not just that it has to be rebuilt: "7.1 DTS audio re-encoded to 5.1". A 7.1 film quietly lost two channels because the plan named the codec and not the count. The downmix is now asked for explicitly rather than inherited from the encoder's default — the same file either way, but only a decision can be reported.
+- Time estimates stop averaging against a guess. The rate the app ships with is a starting point, not a measurement, and it was being weighted as though it were one — four films predicted at 22h10 took 12h57, every one wrong in the same direction. The first real conversion now replaces it outright.
+
+### Fixed
+- **A conversion could be deleted because a probe failed.** The Dolby Vision check treated "couldn't read the file" and "the file has no Dolby Vision" as the same event, and a failed check deletes the output — so a transient error could destroy a finished twenty-gigabyte film and blame it on the picture. The two are now told apart, and every check that deletes its subject says which of them happened.
+
 ## [0.5.0] - 2026-08-20
 
 The Mac becomes the library's workshop: it converts the films the other platforms can't open, and every choice it makes is shown before it makes it.
@@ -25,15 +41,15 @@ The Mac becomes the library's workshop: it converts the films the other platform
 ### Fixed
 - Nothing is kept that can't be trusted. A finished conversion is checked for a picture that actually renders, a container a strict reader can parse to the end, Dolby Vision signalling an Apple device will accept, frame-for-frame parity with the source, and the crop it was asked for. Anything that fails is deleted rather than left to be discovered in a film you can't get back.
 
-### Added
+### Added — the Theater
 - Choosing a seat is now part of the room itself: dim seat lights mark every position, the way a real cinema lights its rows — look at one and it lifts under your gaze; tap it and the room glides you there. The seat you occupy stays dark. The floating seat button is gone.
 - The Theater now dials with the Digital Crown like every other environment: it opens fully sealed, and turning the crown brings the real world back in around the room. It had been locked to full immersion since an early draft whose bare-bones room couldn't tolerate passthrough.
 - The player's title bar now shows a subtitle line, the way the TV app does: the show name and episode number for episodes, the year and genres for matched movies. Fixed along the way: the genre metadata was passed as an array where the system expects a string.
 
-### Changed
+### Changed — the Theater
 - The carpet's slat profile now matches a per-pixel measurement of the original's close-ups: ridge and groove roughly equal (~45%/40% of each period) with a thin bright lip between them, and a dim ridge-top — previously the groove was a narrow 10% cut in a bright surface. Spill gains compensate the darker weave.
 
-### Fixed
+### Fixed — the Theater
 - The carpet is back: the ribbed slat texture had been silently corrupt since the six-seat build (a mis-escaped byte header made it an invalid PNG), so the ceiling and floor rendered smooth. Rebuilt correctly.
 - The seat button is reachable from every seat: the docked video composites over app content, and at the balcony's front row the enlarged screen's bottom edge covered the button's old spot. It now sits lower, clear of the screen from all six seats.
 
