@@ -57,7 +57,15 @@ final class Video: Identifiable {
     /// The YouTube video ID of the movie's official trailer, from TMDB.
     var trailerYouTubeID: String?
     /// For TV episodes: the show this episode belongs to. `nil` means a movie.
+    ///
+    /// The name as the *filename* spelled it, which is what groups an episode on import before
+    /// anything has been matched. `show` is where the series itself lives — its title, its poster,
+    /// its TMDB match — and a match is allowed to rename that without touching this, because this
+    /// is a grouping key and renaming a key regroups the library.
     var showName: String?
+    /// The series this episode belongs to. `nil` for a movie, and for an episode scanned before
+    /// V8 that hasn't been attached yet.
+    var show: Show?
     /// For TV episodes: the season number parsed from the filename ("S01").
     var seasonNumber: Int?
     /// For TV episodes: the episode number parsed from the filename ("E02").

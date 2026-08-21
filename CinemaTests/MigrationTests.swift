@@ -65,7 +65,7 @@ extension CinemaSuite {
         }
 
         // Reopen through the migration plan, exactly like the app does.
-        let currentSchema = Schema(versionedSchema: CinemaSchemaV7.self)
+        let currentSchema = Schema(versionedSchema: CinemaSchemaV8.self)
         let migrated = try ModelContainer(
             for: currentSchema,
             migrationPlan: CinemaMigrationPlan.self,
@@ -105,4 +105,64 @@ extension CinemaSuite {
         #expect(queueItems.first?.video?.name == "Local Movie")
     }
 }
+
+    /// V7 → V8 gains a `Show` model, and the reconciler derives the rows that never existed: one
+    /// per distinct name, with every episode attached. It is also where a library holding two
+    /// spellings of one series is healed, because both match on the same insensitive key.
+    ///
+    /// The backfill lives outside the migration because SwiftData skips a custom stage's
+    /// `didMigrate` when the change is lightweight-eligible — measured, by writing it there first
+    /// and watching four episodes migrate into zero shows.
+    @Test func v7ToV8GivesEveryEpisodeAShowAndMergesSpellings() throws {
+        let storeURL = URL.temporaryDirectory
+            .appending(path: "shows-\(UUID().uuidString)")
+            .appending(path: "store.sqlite")
+        try FileManager.default.createDirectory(at: storeURL.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: storeURL.deletingLastPathComponent()) }
+
+        do {
+            let schema = Schema(versionedSchema: CinemaSchemaV7.self)
+            let container = try ModelContainer(
+                for: schema, configurations: [ModelConfiguration(schema: schema, url: storeURL)])
+            let context = container.mainContext
+            for (name, season, number) in [("Suits", 1, 1), ("suits ", 1, 2), ("Severance", 1, 1)] {
+                let video = Video(name: name, synopsis: name, yearOfRelease: 2011,
+                                  showName: name, seasonNumber: season, episodeNumber: number)
+                video.tmdbShowID = name.hasPrefix("S") && name.contains("uits") ? 37680 : nil
+                context.insert(video)
+            }
+            // A film, which must come out of the migration with no show at all.
+            context.insert(Video(name: "Sinners", synopsis: "Sinners", yearOfRelease: 2025))
+            try context.save()
+        }
+
+        let schema = Schema(versionedSchema: CinemaSchemaV8.self)
+        let migrated = try ModelContainer(
+            for: schema, migrationPlan: CinemaMigrationPlan.self,
+            configurations: [ModelConfiguration(schema: schema, url: storeURL)])
+        let context = migrated.mainContext
+
+        // The migration itself is lightweight; the rows are derived by the reconciler, which is
+        // what the app runs at launch. Asserted here rather than in a separate test because the
+        // pair is the migration — a schema that gains a model nobody fills is not an upgrade.
+        let attached = ShowReconciler.reconcile(in: context)
+        #expect(attached.episodes == 3)
+        #expect(attached.shows == 2)
+
+        let shows = try context.fetch(FetchDescriptor<Show>(sortBy: [SortDescriptor(\.name)]))
+        // "Suits" and "suits " are one series, not two.
+        #expect(shows.map(\.name) == ["Severance", "Suits"])
+
+        let suits = try #require(shows.first { $0.sortKey == "suits" })
+        #expect(suits.episodes?.count == 2)
+        #expect(suits.tmdbShowID == 37680)
+
+        let videos = try context.fetch(FetchDescriptor<Video>())
+        let film = try #require(videos.first { $0.name == "Sinners" })
+        #expect(film.show == nil)
+        // The grouping key is left exactly as the filename spelled it: rewriting it here would be
+        // a migration silently regrouping someone's library.
+        #expect(Set(videos.compactMap(\.showName)) == ["Suits", "suits ", "Severance"])
+    }
 }

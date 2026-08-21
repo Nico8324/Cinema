@@ -13,6 +13,10 @@ struct ShowView: View {
     let showName: String
 
     @Query private var episodes: [Video]
+    /// The series itself. Its name is the one a rename is allowed to change, and the one this page
+    /// is titled with — previously the title came from whichever episode happened to sort first,
+    /// so a single mismatched row could rename the whole show.
+    @Query private var shows: [Show]
 
     @State private var isMatchingShow = false
 
@@ -25,7 +29,11 @@ struct ShowView: View {
             filter: #Predicate<Video> { $0.showName == showName },
             sort: [SortDescriptor(\Video.seasonNumber), SortDescriptor(\Video.episodeNumber)]
         )
+        let key = Show.key(for: showName)
+        self._shows = Query(filter: #Predicate<Show> { $0.sortKey == key })
     }
+
+    private var show: Show? { shows.first }
 
     /// Season numbers in order; episodes without a parsed season fall under 1.
     private var seasons: [(number: Int, episodes: [Video])] {
@@ -52,8 +60,9 @@ struct ShowView: View {
                         }
                         .overlay(alignment: .bottomLeading) {
                             VStack(alignment: .leading, spacing: 2) {
-                                // The official title once matched; the grouping key before.
-                                Text(episodes.first?.name ?? showName)
+                                // The series' own title, which survives its episodes disagreeing
+                                // and outlives any one of them being removed.
+                                Text(show?.name ?? episodes.first?.name ?? showName)
                                     .font(.title.bold())
                                 Text(episodes.count == 1
                                      ? String(localized: "1 episode")

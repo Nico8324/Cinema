@@ -17,7 +17,7 @@ struct PreviewData: PreviewModifier {
     static func makeSharedContext() throws -> ModelContainer {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(
-            for: Video.self, Genre.self, UpNextItem.self,
+            for: Video.self, Genre.self, UpNextItem.self, Show.self,
             configurations: config
         )
         makeSampleLibrary(in: container.mainContext)

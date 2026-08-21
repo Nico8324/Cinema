@@ -49,6 +49,10 @@ struct Cinema: App {
                 // Pick up whatever landed in the media folder since the app last ran, so the
                 // library reflects the folder without anyone having to ask it to.
                 .task {
+                    // Episodes that arrived before shows were rows of their own, or from an
+                    // older build, get the series they belong to. Cheap and idempotent: on a
+                    // library that is already correct it fetches nothing.
+                    ShowReconciler.reconcile(in: modelContainer.mainContext)
                     guard let folder = MediaFolderScanner.folderURL else { return }
                     _ = await MediaFolderScanner.scan(folder: folder, into: modelContainer.mainContext)
                     // Then, if it's been asked for, convert whatever the library couldn't take —
@@ -149,7 +153,7 @@ struct Cinema: App {
         // nothing real: tests create their own containers, and registering the
         // model classes twice with mismatched schemas traps inside SwiftData.
         if NSClassFromString("XCTestCase") != nil {
-            let schema = Schema(versionedSchema: CinemaSchemaV7.self)
+            let schema = Schema(versionedSchema: CinemaSchemaV8.self)
             let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
             guard let container = try? ModelContainer(for: schema, configurations: [config]) else {
                 fatalError("Couldn't create the test-host model container.")
@@ -189,7 +193,7 @@ struct Cinema: App {
     }
 
     private static func openModelContainer() throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CinemaSchemaV7.self)
+        let schema = Schema(versionedSchema: CinemaSchemaV8.self)
         return try ModelContainer(
             for: schema,
             migrationPlan: CinemaMigrationPlan.self,

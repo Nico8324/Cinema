@@ -27,16 +27,31 @@ enum CinemaSchemaV7: VersionedSchema {
     }
 }
 
+/// V8 makes a television series a row of its own.
+///
+/// A show used to be a string copied onto every episode and grouped at query time, which has no
+/// answer to any question about the *show*: where its poster lives, what it is called when its
+/// episodes disagree, or what survives its last episode being deleted. Nothing did — the TMDB
+/// match and everything downloaded for it went with the episode.
+enum CinemaSchemaV8: VersionedSchema {
+    static let versionIdentifier = Schema.Version(8, 0, 0)
+
+    static var models: [any PersistentModel.Type] {
+        [Video.self, Genre.self, UpNextItem.self, Show.self]
+    }
+}
+
 // MARK: - Migration plan
 
 enum CinemaMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [CinemaSchemaV1.self, CinemaSchemaV2.self, CinemaSchemaV3.self, CinemaSchemaV4.self,
-         CinemaSchemaV5.self, CinemaSchemaV6.self, CinemaSchemaV7.self]
+         CinemaSchemaV5.self, CinemaSchemaV6.self, CinemaSchemaV7.self, CinemaSchemaV8.self]
     }
 
     static var stages: [MigrationStage] {
-        [migrateV1toV2, migrateV2toV3, migrateV3toV4, migrateV4toV5, migrateV5toV6, migrateV6toV7]
+        [migrateV1toV2, migrateV2toV3, migrateV3toV4, migrateV4toV5, migrateV5toV6, migrateV6toV7,
+         migrateV7toV8]
     }
 
     /// V1 → V2:
@@ -106,6 +121,19 @@ enum CinemaMigrationPlan: SchemaMigrationPlan {
     static let migrateV6toV7 = MigrationStage.lightweight(
         fromVersion: CinemaSchemaV6.self,
         toVersion: CinemaSchemaV7.self
+    )
+
+    /// V7 → V8: adds the `Show` model and `Video.show` — additive, so lightweight.
+    ///
+    /// The rows themselves are **not** derived here, and that is deliberate rather than a
+    /// shortcut. SwiftData skips a custom stage's `didMigrate` when the schema difference is
+    /// lightweight-eligible, which adding a model and an optional relationship is — measured, by
+    /// writing the backfill here first and watching it not run. A migration that silently does
+    /// nothing is the worst place for work this important, so attaching episodes to shows lives in
+    /// `ShowReconciler`, which runs at launch and is safe to run again.
+    static let migrateV7toV8 = MigrationStage.lightweight(
+        fromVersion: CinemaSchemaV7.self,
+        toVersion: CinemaSchemaV8.self
     )
 }
 

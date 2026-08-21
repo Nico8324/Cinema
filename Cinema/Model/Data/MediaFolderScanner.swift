@@ -155,6 +155,12 @@ enum MediaFolderScanner {
                 episodeNumber: episode?.episode
             )
             context.insert(video)
+            // Attached as it arrives rather than reconciled later: an episode inserted without a
+            // show is one that groups by string until something notices, and "something notices"
+            // is the design this version replaced.
+            if let showName = episode?.showName {
+                video.show = Show.findOrCreate(named: showName, in: context)
+            }
             added.append(video)
             outcome.added += 1
         }

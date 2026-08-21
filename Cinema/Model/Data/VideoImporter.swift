@@ -216,6 +216,9 @@ enum VideoImporter {
                 episodeNumber: file.episode?.episode
             )
             context.insert(video)
+            if let showName = file.episode?.showName {
+                video.show = Show.findOrCreate(named: showName, in: context)
+            }
             return video
         }
         context.saveReportingErrors()
