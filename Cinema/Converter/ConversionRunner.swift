@@ -45,6 +45,14 @@ enum ConversionRunner {
         // sort: right on a Dolby Vision display, badly wrong on every other, and silent about it.
         // Refused rather than guessed at. Nothing in this library is profile 5, and no one has
         // ever run this path.
+        //
+        // Apple's own store delivery settles what carrying it would take, measured from a purchased
+        // film's unencrypted init segments: `frma dvh1`, `dvcC profile=5 compat=0` — no HDR10
+        // fallback in the stream at all — shipped **alongside a separate H.264 rendition of the
+        // same picture**. That second stream is what makes profile 5 safe there, and a local file
+        // has no such companion, which is why the streaming spec's "Dolby Vision MUST be profile 5"
+        // does not transfer here. If this path is ever built it also needs `-tag:v dvh1` rather
+        // than `hvc1`: the tag follows the profile, and the pairs do not mix.
         if plan.source.dolbyVision?.profile == 5 {
             throw ConversionError.dolbyVisionProfile5
         }

@@ -56,6 +56,31 @@ file obtainable, and not a copy of Apple's own, which was made from a master we 
    the RPU renders it as the washed-out wrong-colour picture. 8.1 exists precisely so the base
    layer is legal HDR10. Both files play on Apple hardware; only one degrades correctly. Do
    not "correct" this to Profile 5 on the strength of that citation.
+
+   **This is now measured rather than argued.** A store purchase of *Tenet* was taken apart —
+   the `.movpkg`'s init segments are unencrypted even though the media is not — and Apple's own
+   delivery is exactly what the specification says and exactly what our reasoning predicted:
+
+   ```
+   video rendition 1   frma dvh1   dvcC: profile=5 level=1 rpu=1 el=0 bl=1 compat=0
+   video rendition 2   frma avc1   colr nclx 1/1/1  (BT.709 SDR)
+   both                1422x646, pasp 1:1, cbcs encryption, ftyp iso5
+   ```
+
+   Profile 5 with **compatibility 0** — no HDR10 fallback at all — carried alongside **a
+   separate H.264 SDR rendition of the same picture**. That second stream is the ladder that
+   makes profile 5 safe, and it is why the citation does not transfer: a player that cannot do
+   Dolby Vision is not asked to decode Apple's base layer, it is handed a different file. Ours
+   has no second file, so the base layer must stand on its own, so it must be 8.1.
+
+   The codec tag follows from the same fact and is not a free choice. Apple writes **`dvh1`**,
+   which declares "this is Dolby Vision, do not attempt to read it as plain HEVC" — correct for
+   profile 5, whose IPT base layer genuinely is not HDR10. We write `hvc1`, which invites
+   exactly that reading — correct for 8.1, whose base layer genuinely is. The pair
+   `dvh1`/profile 5 and the pair `hvc1`/profile 8.1 are each internally consistent; mixing them
+   produces either a file no ordinary player will touch or one that will touch it and be
+   wrong. Likewise the box name: `dvcC` is what profile 5 carries, `dvvC` what profile 8
+   carries, and neither is a stylistic variant of the other.
 6. **`dovi_tool` runs on every Dolby Vision source whatever its profile** — including `-m 0`
    for an already-profile-8 file, which looks like a no-op and is not: skip it and GPAC
    writes `compatibility_id=6` instead of 1.
@@ -294,6 +319,21 @@ file obtainable, and not a copy of Apple's own, which was made from a master we 
     structural; only what sits inside them is localised.
 20. **Sidecar `.srt` import**, so a language the disc only stored as bitmaps can be restored
     as text. OCR is not acceptable: wrong words on screen are worse than none.
+
+    **Import, never acquisition.** A file placed beside the source is picked up; nothing goes
+    looking for one. Fetching subtitles from an online source was considered and declined
+    (August 2026) — it adds a network dependency and a correctness risk to a pipeline whose
+    whole argument is that every claim it makes is checkable locally.
+
+    The consequence is accepted rather than outstanding: where a disc carried only bitmaps and
+    no sidecar is supplied, the file ships with no subtitles. Three in this library do, and it
+    would recur on every episode of a series. That was put to the owner with the per-episode
+    framing and declined on the grounds that subtitles are not a requirement for this library.
+    Verified before accepting, because the one case where subtitles are not optional is
+    foreign dialogue in an English film: **none of the three has an English forced track** —
+    what they lost is full subtitles, SDH and commentary, so no dialogue goes untranslated.
+    A source that *did* declare an English forced track and stored it only as bitmaps would be
+    a different question, and should be raised rather than dropped silently.
 21. **Terminological** ISO 639-2 codes (`zho`, not `chi`) — GPAC silently rewrites `chi` to
     `nor`.
 22. **BCP-47 extended tags wherever same-language variants exist**, so two Chinese tracks read
