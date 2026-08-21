@@ -25,3 +25,6 @@ xcuserdata/
 
 # Local secrets — never commit API keys (see Secrets.swift.example)
 Cinema/Model/Data/Secrets.swift
+
+# Personal screen captures — never for the public repo (frames of films are a rights risk).
+new screen/

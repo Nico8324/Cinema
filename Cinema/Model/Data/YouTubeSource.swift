@@ -59,7 +59,9 @@ enum YouTubeSource {
             .filterVideoAndAudio()
             .filter { $0.isNativelyPlayable }
             .highestResolutionStream()
-        logger.debug("Resolved YouTube stream for \(id): \(stream?.url.absoluteString ?? "none")")
+        // The video ID only: the resolved URL carries YouTube's signature tokens, and a signed
+        // URL in a log is a credential in a log.
+        logger.debug("Resolved YouTube stream for \(id): \(stream == nil ? "none" : "ok", privacy: .public)")
         return stream?.url
     }
 

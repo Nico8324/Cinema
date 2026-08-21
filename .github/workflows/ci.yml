@@ -26,6 +26,52 @@ jobs:
             -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
             CODE_SIGNING_ALLOWED=NO
 
+  test-macos:
+    name: Build & test (macOS)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Provide placeholder secrets
+        run: cp Cinema/Model/Data/Secrets.swift.example Cinema/Model/Data/Secrets.swift
+
+      # The converter suite is macOS-only, so without this job its thousand-plus lines never
+      # ran in CI at all. Runners have no ffmpeg; the clip-building tests skip themselves via
+      # `.enabled(if: ConverterTools.ffmpeg != nil)` rather than failing.
+      - name: Build and test
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project Cinema.xcodeproj \
+            -scheme Cinema \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO
+
+  build-tvos:
+    name: Build (tvOS)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Provide placeholder secrets
+        run: cp Cinema/Model/Data/Secrets.swift.example Cinema/Model/Data/Secrets.swift
+
+      # Hosted runners don't preinstall the tvOS platform.
+      - name: Download tvOS platform
+        run: sudo xcodebuild -downloadPlatform tvOS
+
+      # tvOS is a kept platform by decision (2026-08-21): every declared platform builds in CI,
+      # or the declaration shrinks — a platform that is declared, unbuilt and unmentioned is the
+      # gap this job closes.
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project Cinema.xcodeproj \
+            -scheme Cinema \
+            -destination 'generic/platform=tvOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO
+
   build-visionos:
     name: Build (visionOS)
     runs-on: macos-26

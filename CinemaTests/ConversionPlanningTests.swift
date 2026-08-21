@@ -19,8 +19,7 @@ struct ConversionPlanningTests {
     /// a 10-bit file needs four times the 8-bit default. Left at the default, every PQ black bar
     /// reads as picture, no film anywhere appears letterboxed, and the failure is completely
     /// silent — the conversion just encodes a third more pixels than it needed to, forever.
-    @Test func findsBarsInATenBitClip() async throws {
-        try requireFFmpeg()
+    @Test(.enabled(if: ConverterTools.ffmpeg != nil)) func findsBarsInATenBitClip() async throws {
         let clip = try await makeClip(width: 640, height: 360, barHeight: 60, tenBit: true)
         defer { try? FileManager.default.removeItem(at: clip.deletingLastPathComponent()) }
 
@@ -38,8 +37,7 @@ struct ConversionPlanningTests {
         #expect((60...66).contains(top))
     }
 
-    @Test func findsBarsInAnEightBitClip() async throws {
-        try requireFFmpeg()
+    @Test(.enabled(if: ConverterTools.ffmpeg != nil)) func findsBarsInAnEightBitClip() async throws {
         let clip = try await makeClip(width: 640, height: 360, barHeight: 60, tenBit: false)
         defer { try? FileManager.default.removeItem(at: clip.deletingLastPathComponent()) }
 
@@ -51,8 +49,7 @@ struct ConversionPlanningTests {
         #expect((234...240).contains(height))
     }
 
-    @Test func leavesAFullFrameAlone() async throws {
-        try requireFFmpeg()
+    @Test(.enabled(if: ConverterTools.ffmpeg != nil)) func leavesAFullFrameAlone() async throws {
         let clip = try await makeClip(width: 640, height: 360, barHeight: 0, tenBit: true)
         defer { try? FileManager.default.removeItem(at: clip.deletingLastPathComponent()) }
 
@@ -786,10 +783,6 @@ struct ConversionPlanningTests {
     }
 
     // MARK: - Helpers
-
-    private func requireFFmpeg() throws {
-        try #require(ConverterTools.ffmpeg != nil, "ffmpeg isn't installed on this machine")
-    }
 
     /// Builds a real clip with real black bars, since the thing under test is a measurement of
     /// pixels and a fabricated struct would prove nothing about it.
