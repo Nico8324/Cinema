@@ -19,13 +19,8 @@ import CoreMedia
 ///
 /// V7 adds `Video.hasPoster`, so the library can show portrait posters as well as wide backdrops
 /// — two different pictures of the same film, either of which a person may prefer.
-enum CinemaSchemaV7: VersionedSchema {
-    static let versionIdentifier = Schema.Version(7, 0, 0)
-
-    static var models: [any PersistentModel.Type] {
-        [Video.self, Genre.self, UpNextItem.self]
-    }
-}
+///
+/// Its models are snapshotted below rather than the live classes — see the legacy V7 section.
 
 /// V8 makes a television series a row of its own.
 ///
@@ -135,6 +130,93 @@ enum CinemaMigrationPlan: SchemaMigrationPlan {
         fromVersion: CinemaSchemaV7.self,
         toVersion: CinemaSchemaV8.self
     )
+}
+
+// MARK: - Legacy schema V7
+
+/// The V7 schema shape, kept only so existing stores can migrate.
+/// Never reference these models outside the migration plan.
+///
+/// Snapshotted for the reason V6 and V5 are, and the reason is sharper here: V7 used to list the
+/// *live* `Video`, which was harmless while every version differed only by columns. V8 gave the
+/// live `Video` a relationship to `Show`, and from that moment the plan's V7 declared a
+/// relationship to an entity absent from its own model list — a schema describing a shape that
+/// never existed on anyone's disk. A version in a migration plan has to be a photograph of what
+/// was, not a live reference that changes underneath it.
+enum CinemaSchemaV7: VersionedSchema {
+    static let versionIdentifier = Schema.Version(7, 0, 0)
+
+    static var models: [any PersistentModel.Type] {
+        [Video.self, Genre.self, UpNextItem.self]
+    }
+
+    @Model
+    final class Video {
+        @Relationship(inverse: \Genre.videos)
+        var genres: [Genre]
+
+        @Relationship(deleteRule: .cascade, inverse: \UpNextItem.video)
+        var upNextItem: UpNextItem?
+
+        var uuid: UUID = UUID()
+        var localFilename: String?
+
+        @Attribute(originalName: "url")
+        var remoteURL: URL?
+
+        var externalPath: String?
+        var name: String
+        var synopsis: String
+        var yearOfRelease: Int
+        var duration: Int
+        var contentRating: String
+        var dateAdded: Date = Date.distantPast
+        var tmdbID: Int?
+        var trailerYouTubeID: String?
+        var showName: String?
+        var seasonNumber: Int?
+        var episodeNumber: Int?
+        var tmdbShowID: Int?
+        var episodeTitle: String?
+        var hasThumbnail: Bool = false
+        var hasPoster: Bool = false
+        var playbackPosition: Double = 0
+        var lastWatchedDate: Date?
+
+        init(name: String) {
+            self.genres = []
+            self.name = name
+            self.synopsis = ""
+            self.yearOfRelease = 2023
+            self.duration = 0
+            self.contentRating = "NR"
+        }
+    }
+
+    @Model
+    final class Genre {
+        @Relationship
+        var videos: [Video]
+
+        var name: String
+
+        init(name: String) {
+            self.videos = []
+            self.name = name
+        }
+    }
+
+    @Model
+    final class UpNextItem {
+        @Relationship(deleteRule: .nullify)
+        var video: Video?
+
+        var createdAt: Date
+
+        init(createdAt: Date = .now) {
+            self.createdAt = createdAt
+        }
+    }
 }
 
 // MARK: - Legacy schema V6
