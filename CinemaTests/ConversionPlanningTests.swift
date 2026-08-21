@@ -623,6 +623,52 @@ struct ConversionPlanningTests {
         #expect(!stem.isEmpty)
     }
 
+    /// Exercises `SubtitleScan.scan` end to end against a real file, because every other test of
+    /// this feature called `measure` directly — and the bug was never in `measure`.
+    ///
+    /// `scan` read ffmpeg's **stderr** while ffmpeg writes subtitles to **stdout**, so it returned
+    /// an empty string for every track, which measures as zero cues, which both signals read as
+    /// "no". The feature was inert and nothing failed: unit tests fed `measure` their own strings,
+    /// and the real-media validation extracted tracks with a shell command instead of this
+    /// function. A test that mocks the thing under test proves the mock works.
+    @Test(.enabled(if: ConverterTools.ffmpeg != nil))
+    func scanningReadsCuesFromARealFile() async throws {
+        let folder = URL.temporaryDirectory.appending(path: "scan-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        let srt = folder.appending(path: "in.srt")
+        try """
+        1
+        00:00:01,000 --> 00:00:03,000
+        [door creaks]
+
+        2
+        00:00:04,000 --> 00:00:06,000
+        Are you all right?
+
+        """.write(to: srt, atomically: true, encoding: .utf8)
+
+        let mkv = folder.appending(path: "clip.mkv")
+        let ffmpeg = try #require(ConverterTools.ffmpeg)
+        _ = try await Process.output(of: ffmpeg, arguments: [
+            "-y", "-v", "error",
+            "-f", "lavfi", "-i", "color=c=black:s=64x64:d=8",
+            "-i", srt.path(percentEncoded: false),
+            "-c:v", "libx264", "-c:s", "srt", "-shortest",
+            mkv.path(percentEncoded: false)
+        ])
+
+        let media = try await MediaProbe.probe(mkv)
+        let subtitle = try #require(media.subtitles.first)
+        let content = await SubtitleScan.scan([subtitle], of: media)
+
+        let measured = try #require(content[subtitle.index])
+        #expect(measured.cues == 2)
+        #expect(measured.bracketed == 1)
+        #expect(measured.readsAsSDH)
+    }
+
     // MARK: - Tidying the media folder
 
     /// What the tidy pass would do to a folder converted before the naming rules existed.

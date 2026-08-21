@@ -80,13 +80,20 @@ enum SubtitleScan {
         guard let ffmpeg = ConverterTools.ffmpeg else { return [:] }
         var found: [Int: SubtitleContent] = [:]
         for track in tracks {
-            guard let text = try? await Process.diagnostics(of: ffmpeg, arguments: [
+            // `Process.output`, not `Process.diagnostics`. ffmpeg writes the subtitles to
+            // **stdout** and only its complaints to stderr, so reading diagnostics returned an
+            // empty string for every track — and an empty string measures as zero cues, which
+            // `readsAsSDH` and `readsAsForced` both read as "no". The whole cue signal was inert
+            // and nothing failed: the tests exercised `measure` directly, and the real-media check
+            // extracted tracks with a shell command rather than through this function.
+            guard let data = try? await Process.output(of: ffmpeg, arguments: [
                 "-v", "error",
                 "-i", media.url.path(percentEncoded: false),
                 "-map", "0:\(track.index)",
                 "-f", "srt", "-"
             ]) else { continue }
-            found[track.index] = measure(text, duration: media.duration)
+            found[track.index] = measure(String(decoding: data, as: UTF8.self),
+                                         duration: media.duration)
         }
         return found
     }
