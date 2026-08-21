@@ -36,6 +36,13 @@ enum Verification {
     static func check(_ url: URL, wasRebuiltAsDolbyVision: Bool,
                       expectedCroppedSize: (width: Int, height: Int)? = nil,
                       matchingFrameCountOf source: URL? = nil) async throws {
+        // These two `throw` on a failure to *load*, which looks like the shape fixed below in
+        // `checkDolbyVisionRPU` and is the opposite case. The boundary: **delete when the failed
+        // observation is the criterion, pass when it was merely the instrument.** ffprobe failing
+        // to launch says nothing about the file; `AVURLAsset` failing to load has already answered
+        // the question this whole file asks, because opening the asset is exactly what the library
+        // does first. Making these non-throwing would produce a verifier that passes everything —
+        // worse than the bug, since the file then survives and the library can't play it.
         let asset = AVURLAsset(url: url)
         let (playable, duration) = try await asset.load(.isPlayable, .duration)
         let video = try await asset.loadTracks(withMediaType: .video)
@@ -68,6 +75,16 @@ enum Verification {
     /// Costs a pass over each file's index — minutes on a feature, at the end of a job measured in
     /// hours, to close the one failure that every other check here would pass.
     private static func checkFrameParity(source: URL, output: URL) async throws {
+        // Counted against the **source**, never against duration × frame rate. A container's
+        // stated duration and its last frame's presentation interval need not agree to the frame:
+        // this episode's output holds 116,881 where the arithmetic says 116,882.8. That gap is
+        // normal, and a verifier that treats it as evidence deletes a correct file — the expensive
+        // half of the rule that a destructive check must tell "the file failed" from "I failed to
+        // observe it". Source-to-output is the comparison carrying information; arithmetic is a
+        // sanity check that is allowed to be off by one.
+        //
+        // And when the counting itself fails, this passes rather than throws — on a check that
+        // destroys its subject, not observing something is never grounds for deleting it.
         guard let sourceFrames = try? await frameCount(of: source),
               let outputFrames = try? await frameCount(of: output),
               sourceFrames > 0, outputFrames > 0 else { return }
@@ -126,7 +143,14 @@ enum Verification {
                 throw ConversionError.doesNotRender(error.localizedDescription)
             }
         }
-        throw ConversionError.doesNotRender("")
+        // Fifteen seconds with no frame and no error. Two very different things look like this,
+        // and the message has to say which — an item that never reached `readyToPlay` is usually
+        // the *harness*, not the file: `AVPlayerItem` advances its status on the main run loop, so
+        // anything that waits without turning that loop waits forever and reports a healthy file as
+        // broken. Inside the app the loop always turns; a command-line check is where this bites.
+        throw ConversionError.doesNotRender(item.status == .readyToPlay
+            ? String(localized: "no frame was produced in 15 seconds")
+            : String(localized: "the player never became ready, and reported no error"))
     }
 
     /// Confirms a stricter parser can read the file to the end.
@@ -143,6 +167,11 @@ enum Verification {
     /// report failure only in words, after `inject-rpu`'s `mismatched lengths` and `-info` writing
     /// to stderr in the first place.
     private static func checkContainerIsWellFormed(_ url: URL) async throws {
+        // Both of these pass rather than throw, deliberately: a missing tool and a tool that won't
+        // run are failures to *observe*, and every failure in this file deletes the output. That
+        // rule is written here rather than assumed because the opposite shape is one screen away
+        // and the two do not look different at a glance — a `return` that reads as an oversight is
+        // exactly what someone later tidies into a `throw`.
         guard let mp4box = ConverterTools.mp4box else { return }
         guard let info = try? await Process.diagnostics(of: mp4box, arguments: [
             "-info", url.path(percentEncoded: false)
@@ -187,13 +216,24 @@ enum Verification {
         let nearEnd = max(0, durationInSeconds - 10)
 
         for interval in ["%+2", "\(nearEnd)%+2"] {
-            let output = try? await Process.output(of: ffprobe, arguments: [
+            // The two failures below are *not* the same event, and conflating them is how a
+            // perfect twenty-gigabyte conversion gets deleted because a probe hiccupped — with an
+            // error naming the wrong culprit, so nobody thinks to re-run it. A killed process, a
+            // timeout, a transient read: none of them are evidence about the file.
+            guard let output = try? await Process.output(of: ffprobe, arguments: [
                 "-v", "error", "-select_streams", "v:0",
                 "-show_frames", "-show_entries", "frame=side_data_list",
                 "-read_intervals", interval, "-print_format", "json",
                 url.path(percentEncoded: false)
-            ])
-            guard let output, hasDolbyVisionRPU(in: output) else {
+            ]) else { continue }   // Couldn't look here. Deliberate pass — see below.
+            // `continue` rather than `return`: this check samples the head *and* the tail because
+            // ffmpeg's invented frames land at the end, past where a single sample looks. One
+            // hiccup at the head must not silently disable the tail sample too — that would be
+            // safe in the delete-nothing direction and would throw away the coverage the
+            // two-sample design exists for.
+
+            // Looked, and the frames carry no RPU. That is a reading, and it condemns the file.
+            guard hasDolbyVisionRPU(in: output) else {
                 throw ConversionError.dolbyVisionLost
             }
         }
