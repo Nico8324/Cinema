@@ -43,16 +43,20 @@ struct Cinema: App {
                 #if os(visionOS)
                 .environment(immersiveEnvironment)
                 #endif
+                // Episodes that arrived before shows were rows of their own, or from an older
+                // build, get the series they belong to. On **every** platform: the V7 → V8
+                // backfill is not a Mac concern, and an iPhone library that never ran it would
+                // keep `show == nil` on every existing episode for good. It was inside the macOS
+                // block only because the folder scan it sat next to is Mac-only.
+                //
+                // Cheap and idempotent: on a library that is already correct it fetches nothing.
+                .task { ShowReconciler.reconcile(in: modelContainer.mainContext) }
                 #if os(macOS)
                 .toolbar(removing: .title)
                 .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
                 // Pick up whatever landed in the media folder since the app last ran, so the
                 // library reflects the folder without anyone having to ask it to.
                 .task {
-                    // Episodes that arrived before shows were rows of their own, or from an
-                    // older build, get the series they belong to. Cheap and idempotent: on a
-                    // library that is already correct it fetches nothing.
-                    ShowReconciler.reconcile(in: modelContainer.mainContext)
                     guard let folder = MediaFolderScanner.folderURL else { return }
                     _ = await MediaFolderScanner.scan(folder: folder, into: modelContainer.mainContext)
                     // Then, if it's been asked for, convert whatever the library couldn't take —

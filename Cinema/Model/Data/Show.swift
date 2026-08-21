@@ -74,9 +74,14 @@ final class Show {
 
     /// The grouping key for a show name as a filename spelled it.
     static func key(for name: String) -> String {
+        // Every run of whitespace collapses, not one pass of double spaces: replacing "  " with
+        // " " turns three spaces into two and stops, so `My   Show` and `My  Show` would key
+        // differently and become two series — the exact failure this key exists to prevent,
+        // surviving inside the fix for it.
         name.trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
-            .replacingOccurrences(of: "  ", with: " ")
+            .split(separator: " ", omittingEmptySubsequences: true)
+            .joined(separator: " ")
     }
 
     /// The show for a name, creating it the first time that name is seen.

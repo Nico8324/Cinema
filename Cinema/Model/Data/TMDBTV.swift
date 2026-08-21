@@ -368,6 +368,18 @@ extension TMDB {
     static func apply(_ match: ShowMatch, to episodes: [Video], in context: ModelContext) {
         let genreNames = match.page.genreNames
 
+        // The series itself, not only its episodes. Without this the `Show` row keeps the name a
+        // filename gave it and never learns its match — which made `Show`'s own documentation
+        // false: it promises the title is "replaced by TMDB's own once matched", and that a show
+        // "outlives its last episode with its match intact". Neither was true while the only
+        // writer of `Show.tmdbShowID` was the legacy backfill.
+        if let show = episodes.compactMap(\.show).first {
+            show.tmdbShowID = match.show.id
+            show.name = match.show.name
+            if let overview = match.page.overview, !overview.isEmpty { show.synopsis = overview }
+            if let year = match.page.firstAirYear { show.firstAiredYear = year }
+        }
+
         for video in episodes {
             video.tmdbShowID = match.show.id
             // `name` is the display title; `showName` stays untouched — it's the

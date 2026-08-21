@@ -57,6 +57,13 @@ struct ShowTests {
         #expect(surviving.first?.tmdbShowID == 37680)
     }
 
+    /// Three spaces used to key differently from two: replacing "  " with " " turns three into
+    /// two and stops. The grouping bug survived inside its own fix.
+    @Test func runsOfSpaceCollapseHoweverManyThereAre() throws {
+        #expect(Show.key(for: "My   Show") == Show.key(for: "My  Show"))
+        #expect(Show.key(for: "My   Show") == "my show")
+    }
+
     /// Episodes read in the order the series runs, not the order they were added — and season 10
     /// comes after season 2 rather than between 1 and 3.
     @Test func episodesReadInBroadcastOrder() throws {
