@@ -79,6 +79,9 @@ struct EditVideoView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
+                        // A hand-edit outranks TMDB from here on: background refreshes skip
+                        // the editable fields while this is set, so the correction survives.
+                        video.userEditedMetadata = true
                         // Sweep genres the edit may have emptied, so the Library's
                         // filter row doesn't accumulate dead pills.
                         Genre.deleteOrphaned(in: context)

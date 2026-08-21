@@ -29,29 +29,29 @@ extension TMDB {
 
         /// A small poster image for search-result rows.
         var thumbnailURL: URL? {
-            posterPath.map { URL(string: "https://image.tmdb.org/t/p/w154\($0)")! }
+            posterPath.flatMap { imageURL(size: "w154", path: $0) }
         }
 
         /// A mid-size portrait poster for browsing cards.
         var posterCardURL: URL? {
-            posterPath.map { URL(string: "https://image.tmdb.org/t/p/w342\($0)")! }
+            posterPath.flatMap { imageURL(size: "w342", path: $0) }
         }
 
         /// See `TMDB.Movie.fullResolutionPosterURL` — the stored poster is shown at grid size on
         /// Retina displays, so it's kept at the size TMDB holds it.
         var fullResolutionPosterURL: URL? {
-            posterPath.map { URL(string: "https://image.tmdb.org/t/p/original\($0)")! }
+            posterPath.flatMap { imageURL(size: "original", path: $0) }
         }
 
         /// The landscape backdrop, sized for the app's 16:9 poster cards.
         var backdropURL: URL? {
-            backdropPath.map { URL(string: "https://image.tmdb.org/t/p/w780\($0)")! }
+            backdropPath.flatMap { imageURL(size: "w780", path: $0) }
         }
 
         /// See `TMDB.Movie.fullResolutionBackdropURL` — the stored show artwork is shown full-bleed
         /// as a page header, so it needs the same treatment as a film's.
         var fullResolutionBackdropURL: URL? {
-            backdropPath.map { URL(string: "https://image.tmdb.org/t/p/original\($0)")! }
+            backdropPath.flatMap { imageURL(size: "original", path: $0) }
         }
     }
 
@@ -96,7 +96,7 @@ extension TMDB {
         let url = endpoint(list.path, query: [
             URLQueryItem(name: "language", value: Locale.preferredLanguages.first ?? "en-US")
         ])
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let data = try await validatedData(from: url)
         struct ListResponse: Codable {
             let results: [Show]
         }
@@ -170,7 +170,7 @@ extension TMDB {
                     personID: member.id,
                     name: member.name,
                     role: member.roles?.first?.character ?? "",
-                    profileURL: member.profilePath.map { URL(string: "https://image.tmdb.org/t/p/w185\($0)")! }
+                    profileURL: member.profilePath.flatMap { imageURL(size: "w185", path: $0) }
                 )
             }
         }
@@ -210,7 +210,7 @@ extension TMDB {
         }
 
         var thumbnailURL: URL? {
-            posterPath.map { URL(string: "https://image.tmdb.org/t/p/w154\($0)")! }
+            posterPath.flatMap { imageURL(size: "w154", path: $0) }
         }
 
         /// The credit as a displayable show, for the shared show page.
@@ -238,7 +238,7 @@ extension TMDB {
         let url = endpoint("/person/\(personID)/tv_credits", query: [
             URLQueryItem(name: "language", value: Locale.preferredLanguages.first ?? "en-US")
         ])
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let data = try await validatedData(from: url)
         let credits = try decoder.decode(CreditsResponse.self, from: data).cast
         var seen = Set<Int>()
         return credits.filter { seen.insert($0.id).inserted }
@@ -257,7 +257,7 @@ extension TMDB {
         }
 
         var stillURL: URL? {
-            stillPath.map { URL(string: "https://image.tmdb.org/t/p/w780\($0)")! }
+            stillPath.flatMap { imageURL(size: "w780", path: $0) }
         }
     }
 
@@ -287,7 +287,7 @@ extension TMDB {
             URLQueryItem(name: "include_adult", value: "false"),
             URLQueryItem(name: "language", value: Locale.preferredLanguages.first ?? "en-US")
         ])
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let data = try await validatedData(from: url)
         struct SearchResponse: Codable {
             let results: [Show]
         }
@@ -299,7 +299,7 @@ extension TMDB {
         let url = endpoint("/tv/\(showID)", query: [
             URLQueryItem(name: "language", value: Locale.preferredLanguages.first ?? "en-US")
         ])
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let data = try await validatedData(from: url)
         return try decoder.decode(Show.self, from: data)
     }
 
@@ -309,7 +309,7 @@ extension TMDB {
             URLQueryItem(name: "language", value: Locale.preferredLanguages.first ?? "en-US"),
             URLQueryItem(name: "append_to_response", value: "aggregate_credits,content_ratings,videos")
         ])
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let data = try await validatedData(from: url)
         return try decoder.decode(ShowPage.self, from: data)
     }
 
@@ -318,7 +318,7 @@ extension TMDB {
         let url = endpoint("/tv/\(showID)/season/\(season)", query: [
             URLQueryItem(name: "language", value: Locale.preferredLanguages.first ?? "en-US")
         ])
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let data = try await validatedData(from: url)
         struct SeasonResponse: Codable {
             let episodes: [EpisodeInfo]
         }
@@ -341,7 +341,7 @@ extension TMDB {
                 bySeason[info.episodeNumber] = info
                 if ownedNumbers.contains(info.episodeNumber),
                    let stillURL = info.stillURL,
-                   let (data, _) = try? await URLSession.shared.data(from: stillURL) {
+                   let data = try? await validatedData(from: stillURL) {
                     stills[SeasonEpisodeKey(season: season, episode: info.episodeNumber)] = data
                 }
             }
@@ -351,7 +351,7 @@ extension TMDB {
         // The show's backdrop becomes the shared card/header artwork.
         var backdropData: Data?
         if let backdropURL = show.fullResolutionBackdropURL,
-           let (data, _) = try? await URLSession.shared.data(from: backdropURL) {
+           let data = try? await validatedData(from: backdropURL) {
             backdropData = data
         }
 
@@ -365,7 +365,8 @@ extension TMDB {
     /// official show name, genres, rating, show trailer, and per-episode
     /// titles, overviews, air years, and still artwork.
     @MainActor
-    static func apply(_ match: ShowMatch, to episodes: [Video], in context: ModelContext) {
+    static func apply(_ match: ShowMatch, to episodes: [Video], in context: ModelContext,
+                      overridingUserEdits: Bool = false) {
         let genreNames = match.page.genreNames
 
         // The series itself, not only its episodes. Without this the `Show` row keeps the name a
@@ -381,30 +382,38 @@ extension TMDB {
         }
 
         for video in episodes {
+            if overridingUserEdits {
+                video.userEditedMetadata = false
+            }
             video.tmdbShowID = match.show.id
-            // `name` is the display title; `showName` stays untouched — it's the
-            // stable grouping key open pages and navigation are keyed by.
-            video.name = match.show.name
             video.trailerYouTubeID = match.page.trailerYouTubeID
-            if let rating = match.page.usRating, !rating.isEmpty {
-                video.contentRating = rating
-            }
-            if !genreNames.isEmpty {
-                applyGenres(named: genreNames, to: video, in: context)
-            }
 
             let season = video.seasonNumber ?? 1
             let episodeNumber = video.episodeNumber ?? 1
+            // An episode the person edited by hand keeps its edited fields — see `TMDB.apply`.
+            if !video.userEditedMetadata {
+                // `name` is the display title; `showName` stays untouched — it's the
+                // stable grouping key open pages and navigation are keyed by.
+                video.name = match.show.name
+                if let rating = match.page.usRating, !rating.isEmpty {
+                    video.contentRating = rating
+                }
+                if !genreNames.isEmpty {
+                    applyGenres(named: genreNames, to: video, in: context)
+                }
+                if let info = match.episodes[season]?[episodeNumber] {
+                    video.episodeTitle = info.name
+                    video.synopsis = info.overview?.isEmpty == false
+                        ? info.overview!
+                        : match.show.overview
+                    video.yearOfRelease = info.airYear ?? match.page.firstAirYear ?? video.yearOfRelease
+                } else {
+                    video.synopsis = match.show.overview
+                    video.yearOfRelease = match.page.firstAirYear ?? video.yearOfRelease
+                }
+            }
             if let info = match.episodes[season]?[episodeNumber] {
-                video.episodeTitle = info.name
-                video.synopsis = info.overview?.isEmpty == false
-                    ? info.overview!
-                    : match.show.overview
-                video.yearOfRelease = info.airYear ?? match.page.firstAirYear ?? video.yearOfRelease
                 applyArtwork(match.stills[SeasonEpisodeKey(season: season, episode: episodeNumber)], to: video)
-            } else {
-                video.synopsis = match.show.overview
-                video.yearOfRelease = match.page.firstAirYear ?? video.yearOfRelease
             }
         }
 
@@ -422,7 +431,7 @@ extension TMDB {
         let url = MediaStore.posterURL(forFilename: MediaStore.showArtworkFilename(forShowID: showID))
         do {
             try FileManager.default.createDirectory(at: MediaStore.postersDirectory, withIntermediateDirectories: true)
-            try data.write(to: url)
+            try data.write(to: url, options: .atomic)
             PosterImageCache.invalidate(at: url)
         } catch {
             MediaStore.logger.error("Couldn't save the poster for show \(showID): \(error.localizedDescription)")
@@ -437,7 +446,7 @@ extension TMDB {
         let filename = MediaStore.showArtworkFilename(forShowID: showID)
         do {
             try FileManager.default.createDirectory(at: MediaStore.thumbnailsDirectory, withIntermediateDirectories: true)
-            try data.write(to: MediaStore.thumbnailURL(forFilename: filename))
+            try data.write(to: MediaStore.thumbnailURL(forFilename: filename), options: .atomic)
             PosterImageCache.invalidate(at: MediaStore.thumbnailURL(forFilename: filename))
         } catch {
             MediaStore.logger.error("Couldn't save the show backdrop for show \(showID): \(error.localizedDescription)")

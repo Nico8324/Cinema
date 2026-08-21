@@ -22,8 +22,18 @@ enum PosterBackfill {
         for video in videos where !video.isEpisode {
             guard !Task.isCancelled else { return }
             guard let movieID = video.tmdbID,
-                  let filename = video.thumbnailFilename,
-                  !hasStoredPoster(named: filename) else { continue }
+                  let filename = video.thumbnailFilename else { continue }
+            if hasStoredPoster(named: filename) {
+                // Heal a stranded flag: `applyPoster` toggles `hasPoster` through false and
+                // restores it a cycle later, so a termination between the two writes persists
+                // `false` while the file sits on disk — and this loop would then skip the
+                // title forever without ever showing its poster.
+                if !video.hasPoster {
+                    video.hasPoster = true
+                    video.modelContext?.saveReportingErrors()
+                }
+                continue
+            }
             guard let movie = try? await TMDB.movie(forID: movieID) else { continue }
             TMDB.applyPoster(try? await TMDB.fetchImage(at: movie.fullResolutionPosterURL), to: video)
         }

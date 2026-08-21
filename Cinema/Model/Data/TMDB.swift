@@ -42,12 +42,12 @@ enum TMDB {
 
         /// A small poster image for search-result rows.
         var thumbnailURL: URL? {
-            posterPath.map { URL(string: "https://image.tmdb.org/t/p/w154\($0)")! }
+            posterPath.flatMap { imageURL(size: "w154", path: $0) }
         }
 
         /// A mid-size portrait poster for browsing cards.
         var posterCardURL: URL? {
-            posterPath.map { URL(string: "https://image.tmdb.org/t/p/w342\($0)")! }
+            posterPath.flatMap { imageURL(size: "w342", path: $0) }
         }
 
         /// The poster at the size TMDB holds it, for artwork the app stores.
@@ -55,12 +55,12 @@ enum TMDB {
         /// Posters are shown at up to a full grid cell and on Retina displays, and this is the
         /// picture the app keeps rather than re-fetches, so it takes the largest there is.
         var fullResolutionPosterURL: URL? {
-            posterPath.map { URL(string: "https://image.tmdb.org/t/p/original\($0)")! }
+            posterPath.flatMap { imageURL(size: "original", path: $0) }
         }
 
         /// The landscape backdrop, sized for the app's 16:9 poster cards.
         var backdropURL: URL? {
-            backdropPath.map { URL(string: "https://image.tmdb.org/t/p/w780\($0)")! }
+            backdropPath.flatMap { imageURL(size: "w780", path: $0) }
         }
 
         /// The backdrop at the size TMDB holds it, for artwork the app keeps and shows full-bleed.
@@ -71,7 +71,7 @@ enum TMDB {
         /// half times. This is downloaded once per film and stored, rather than on every scroll,
         /// which is what makes the larger file worth it here and not on the browsing rows.
         var fullResolutionBackdropURL: URL? {
-            backdropPath.map { URL(string: "https://image.tmdb.org/t/p/original\($0)")! }
+            backdropPath.flatMap { imageURL(size: "original", path: $0) }
         }
     }
 
@@ -116,7 +116,7 @@ enum TMDB {
         let profilePath: String?
 
         var portraitURL: URL? {
-            profilePath.map { URL(string: "https://image.tmdb.org/t/p/w342\($0)")! }
+            profilePath.flatMap { imageURL(size: "w342", path: $0) }
         }
     }
 
@@ -135,7 +135,7 @@ enum TMDB {
         }
 
         var thumbnailURL: URL? {
-            posterPath.map { URL(string: "https://image.tmdb.org/t/p/w154\($0)")! }
+            posterPath.flatMap { imageURL(size: "w154", path: $0) }
         }
 
         /// The credit as a displayable movie, for the shared movie page.
@@ -161,7 +161,7 @@ enum TMDB {
         let url = endpoint("/person/\(personID)", query: [
             URLQueryItem(name: "language", value: Locale.preferredLanguages.first ?? "en-US")
         ])
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let data = try await validatedData(from: url)
         return try decoder.decode(PersonDetails.self, from: data)
     }
 
@@ -173,7 +173,7 @@ enum TMDB {
         let url = endpoint("/person/\(personID)/movie_credits", query: [
             URLQueryItem(name: "language", value: Locale.preferredLanguages.first ?? "en-US")
         ])
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let data = try await validatedData(from: url)
         let credits = try decoder.decode(CreditsResponse.self, from: data).cast
         var seen = Set<Int>()
         return credits.filter { seen.insert($0.id).inserted }
@@ -243,7 +243,7 @@ enum TMDB {
         }
 
         private func profileURL(for path: String?) -> URL? {
-            path.map { URL(string: "https://image.tmdb.org/t/p/w185\($0)")! }
+            path.flatMap { imageURL(size: "w185", path: $0) }
         }
     }
 
@@ -253,7 +253,7 @@ enum TMDB {
             URLQueryItem(name: "language", value: Locale.preferredLanguages.first ?? "en-US"),
             URLQueryItem(name: "append_to_response", value: "credits")
         ])
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let data = try await validatedData(from: url)
         return try decoder.decode(MoviePage.self, from: data)
     }
 
@@ -283,6 +283,43 @@ enum TMDB {
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return decoder
     }()
+
+    /// A non-2xx answer from TMDB, kept as a typed error so callers can tell a
+    /// rate limit (429) apart from everything else.
+    struct HTTPError: Error {
+        let statusCode: Int
+        var isRateLimit: Bool { statusCode == 429 }
+    }
+
+    /// The session all TMDB traffic goes through. Explicit timeouts, because the library-wide
+    /// refresh runs its downloads in sequence — with the default 60-second request timeout one
+    /// stalled image would park the whole pass.
+    static let session: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = 30
+        configuration.timeoutIntervalForResource = 120
+        return URLSession(configuration: configuration)
+    }()
+
+    /// Fetches a URL and checks the HTTP status before anything consumes the body.
+    ///
+    /// Without the check, an error body walks straight through: JSON endpoints happen to fail
+    /// at decode, but the raw image fetches would write a 429 page to disk as a "poster" —
+    /// and since the backfill only checks that a file exists, that artwork would be broken
+    /// until a manual re-match.
+    static func validatedData(from url: URL) async throws -> Data {
+        let (data, response) = try await session.data(from: url)
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            throw HTTPError(statusCode: http.statusCode)
+        }
+        return data
+    }
+
+    /// A TMDB image URL, built without force-unwrapping: the path arrives from the network,
+    /// and a single URL-invalid character in it must not be able to crash the app.
+    static func imageURL(size: String, path: String) -> URL? {
+        URL(string: "https://image.tmdb.org/t/p/\(size)\(path)")
+    }
 
     static func endpoint(_ path: String, query: [URLQueryItem] = []) -> URL {
         var components = URLComponents(string: "https://api.themoviedb.org/3\(path)")!
@@ -339,7 +376,7 @@ enum TMDB {
         if list.usesRegion {
             query.append(URLQueryItem(name: "region", value: Locale.current.region?.identifier ?? "US"))
         }
-        let (data, _) = try await URLSession.shared.data(from: endpoint(list.path, query: query))
+        let data = try await validatedData(from: endpoint(list.path, query: query))
         // Cards are pure poster art — entries without a poster have nothing to show.
         return try decoder.decode(SearchResponse.self, from: data).results.filter { $0.posterPath != nil }
     }
@@ -351,7 +388,7 @@ enum TMDB {
             URLQueryItem(name: "include_adult", value: "false"),
             URLQueryItem(name: "language", value: Locale.preferredLanguages.first ?? "en-US")
         ])
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let data = try await validatedData(from: url)
         return try decoder.decode(SearchResponse.self, from: data).results
     }
 
@@ -360,7 +397,7 @@ enum TMDB {
         let url = endpoint("/movie/\(movieID)", query: [
             URLQueryItem(name: "language", value: Locale.preferredLanguages.first ?? "en-US")
         ])
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let data = try await validatedData(from: url)
         return try decoder.decode(Movie.self, from: data)
     }
 
@@ -389,7 +426,7 @@ enum TMDB {
         let url = endpoint("/movie/\(movieID)/videos", query: [
             URLQueryItem(name: "language", value: "en-US")
         ])
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let data = try await validatedData(from: url)
         let clips = try decoder.decode(VideosResponse.self, from: data).results.filter { $0.site == "YouTube" }
         let best = clips.first { $0.type == "Trailer" && $0.official }
             ?? clips.first { $0.type == "Trailer" }
@@ -403,13 +440,13 @@ enum TMDB {
         let url = endpoint("/movie/\(movieID)", query: [
             URLQueryItem(name: "language", value: Locale.preferredLanguages.first ?? "en-US")
         ])
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let data = try await validatedData(from: url)
         return try decoder.decode(MovieDetails.self, from: data)
     }
 
     /// The US certification (like "PG-13"), matching the app's rating vocabulary.
     private static func fetchCertification(movieID: Int) async throws -> String? {
-        let (data, _) = try await URLSession.shared.data(from: endpoint("/movie/\(movieID)/release_dates"))
+        let data = try await validatedData(from: endpoint("/movie/\(movieID)/release_dates"))
         let response = try decoder.decode(ReleaseDatesResponse.self, from: data)
         return response.results
             .first { $0.iso31661 == "US" }?
@@ -426,28 +463,39 @@ enum TMDB {
     /// than a failure — plenty of titles have a poster but no backdrop, or the reverse.
     static func fetchImage(at url: URL?) async throws -> Data? {
         guard let url else { return nil }
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let data = try await validatedData(from: url)
         return data
     }
 
     /// Applies a TMDB match to a video: title, synopsis, year, certification,
     /// genres (found-or-created), and the backdrop as the poster thumbnail.
+    ///
+    /// A video the person has edited by hand keeps its edited fields: a background refresh
+    /// re-applying TMDB over them is data loss from the user's point of view. Only an explicit
+    /// re-match from the search sheet passes `overridingUserEdits` — choosing a match by hand
+    /// is the one statement that TMDB's version is wanted after all.
     @MainActor
-    static func apply(_ match: Match, to video: Video, in context: ModelContext) {
-        video.name = match.movie.title
+    static func apply(_ match: Match, to video: Video, in context: ModelContext,
+                      overridingUserEdits: Bool = false) {
+        if overridingUserEdits {
+            video.userEditedMetadata = false
+        }
         video.tmdbID = match.movie.id
         video.trailerYouTubeID = match.trailerYouTubeID
-        if !match.movie.overview.isEmpty {
-            video.synopsis = match.movie.overview
-        }
-        if let year = match.movie.year {
-            video.yearOfRelease = year
-        }
-        if let certification = match.certification, !certification.isEmpty {
-            video.contentRating = certification
+        if !video.userEditedMetadata {
+            video.name = match.movie.title
+            if !match.movie.overview.isEmpty {
+                video.synopsis = match.movie.overview
+            }
+            if let year = match.movie.year {
+                video.yearOfRelease = year
+            }
+            if let certification = match.certification, !certification.isEmpty {
+                video.contentRating = certification
+            }
+            applyGenres(named: match.genreNames, to: video, in: context)
         }
 
-        applyGenres(named: match.genreNames, to: video, in: context)
         applyArtwork(match.backdropData, to: video)
         applyPoster(match.posterData, to: video)
 
@@ -477,7 +525,9 @@ enum TMDB {
         let url = MediaStore.posterURL(forFilename: filename)
         do {
             try FileManager.default.createDirectory(at: MediaStore.postersDirectory, withIntermediateDirectories: true)
-            try data.write(to: url)
+            // Atomic, so a crash mid-write can't leave a truncated file that the backfill's
+            // exists-on-disk check would treat as a finished poster forever.
+            try data.write(to: url, options: .atomic)
             PosterImageCache.invalidate(at: url)
             // Same two-step as `applyArtwork`: both writes inside one SwiftUI transaction would
             // cancel out, and no view would reload the changed file.
@@ -498,7 +548,7 @@ enum TMDB {
         guard let data, let filename = video.thumbnailFilename else { return }
         do {
             try FileManager.default.createDirectory(at: MediaStore.thumbnailsDirectory, withIntermediateDirectories: true)
-            try data.write(to: MediaStore.thumbnailURL(forFilename: filename))
+            try data.write(to: MediaStore.thumbnailURL(forFilename: filename), options: .atomic)
             PosterImageCache.invalidate(at: MediaStore.thumbnailURL(forFilename: filename))
             // Toggle hasThumbnail through false, restoring it on the next run-loop
             // cycle — both writes in one SwiftUI transaction would cancel out and

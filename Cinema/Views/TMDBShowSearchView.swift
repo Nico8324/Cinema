@@ -121,7 +121,7 @@ struct TMDBShowSearchView: View {
         Task {
             do {
                 let match = try await TMDB.loadShowMatch(for: show, ownedSeasonEpisodes: ownedSeasonEpisodes)
-                TMDB.apply(match, to: episodes, in: context)
+                TMDB.apply(match, to: episodes, in: context, overridingUserEdits: true)
                 dismiss()
             } catch {
                 errorMessage = error.localizedDescription

@@ -120,7 +120,7 @@ struct TMDBSearchView: View {
         Task {
             do {
                 let match = try await TMDB.loadMatch(for: movie)
-                TMDB.apply(match, to: video, in: context)
+                TMDB.apply(match, to: video, in: context, overridingUserEdits: true)
                 dismiss()
             } catch {
                 errorMessage = error.localizedDescription

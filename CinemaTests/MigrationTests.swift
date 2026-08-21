@@ -65,7 +65,7 @@ extension CinemaSuite {
         }
 
         // Reopen through the migration plan, exactly like the app does.
-        let currentSchema = Schema(versionedSchema: CinemaSchemaV8.self)
+        let currentSchema = Schema(versionedSchema: CinemaSchemaV9.self)
         let migrated = try ModelContainer(
             for: currentSchema,
             migrationPlan: CinemaMigrationPlan.self,
@@ -137,7 +137,7 @@ extension CinemaSuite {
             try context.save()
         }
 
-        let schema = Schema(versionedSchema: CinemaSchemaV8.self)
+        let schema = Schema(versionedSchema: CinemaSchemaV9.self)
         let migrated = try ModelContainer(
             for: schema, migrationPlan: CinemaMigrationPlan.self,
             configurations: [ModelConfiguration(schema: schema, url: storeURL)])

@@ -79,6 +79,13 @@ final class Video: Identifiable {
     /// Separate from `hasThumbnail`: that one is a frame taken from the film, this one is the
     /// studio's own artwork, and a video can have either, both or neither.
     var hasPoster: Bool = false
+    /// Whether the person has edited this video's metadata by hand (Edit Video sheet).
+    ///
+    /// A hand-edited title or synopsis outranks TMDB's: background refreshes skip the editable
+    /// fields while this is set, so a correction survives every "refresh library metadata".
+    /// Cleared only by an explicit re-match from the search sheet — choosing a match by hand is
+    /// the one statement that TMDB's version is wanted after all.
+    var userEditedMetadata: Bool = false
     /// Whether a poster thumbnail has been generated from the video file itself (see `ThumbnailGenerator`).
     /// Generation happens asynchronously after import, so this starts `false` and flips once the file lands on disk.
     var hasThumbnail: Bool = false

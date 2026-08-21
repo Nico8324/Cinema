@@ -38,34 +38,60 @@ extension TMDB {
         for video in movies {
             guard let movieID = video.tmdbID else { continue }
             do {
-                let movie = try await movie(forID: movieID)
-                let match = try await loadMatch(for: movie)
-                apply(match, to: video, in: context)
+                try await withRateLimitRetry {
+                    let movie = try await movie(forID: movieID)
+                    let match = try await loadMatch(for: movie)
+                    apply(match, to: video, in: context)
+                }
                 outcome.updated += 1
             } catch {
                 outcome.failed += 1
             }
             completed += 1
             onProgress(completed, total)
+            await pace()
         }
 
         for (showID, episodes) in showGroups {
             do {
-                let show = try await show(forID: showID)
-                var ownedSeasonEpisodes: [Int: Set<Int>] = [:]
-                for episode in episodes {
-                    ownedSeasonEpisodes[episode.seasonNumber ?? 1, default: []].insert(episode.episodeNumber ?? 1)
+                try await withRateLimitRetry {
+                    let show = try await show(forID: showID)
+                    var ownedSeasonEpisodes: [Int: Set<Int>] = [:]
+                    for episode in episodes {
+                        ownedSeasonEpisodes[episode.seasonNumber ?? 1, default: []].insert(episode.episodeNumber ?? 1)
+                    }
+                    let match = try await loadShowMatch(for: show, ownedSeasonEpisodes: ownedSeasonEpisodes)
+                    apply(match, to: episodes, in: context)
                 }
-                let match = try await loadShowMatch(for: show, ownedSeasonEpisodes: ownedSeasonEpisodes)
-                apply(match, to: episodes, in: context)
                 outcome.updated += 1
             } catch {
                 outcome.failed += 1
             }
             completed += 1
             onProgress(completed, total)
+            await pace()
         }
 
         return outcome
+    }
+
+    /// A short breath between titles. Each movie fans out to five concurrent requests, so a
+    /// few-hundred-title library refreshed back-to-back can reach TMDB's rate cap all by
+    /// itself — and a rate-limited pass just counts everything as "failed".
+    private static func pace() async {
+        try? await Task.sleep(for: .milliseconds(250))
+    }
+
+    /// Runs one title's refresh, retrying once after a pause if TMDB answered 429.
+    /// One retry only: if the second attempt is also rate-limited, the title counts as
+    /// failed and the pass moves on rather than hammering the same endpoints.
+    @MainActor
+    private static func withRateLimitRetry(_ body: @MainActor () async throws -> Void) async throws {
+        do {
+            try await body()
+        } catch let error as HTTPError where error.isRateLimit {
+            try? await Task.sleep(for: .seconds(3))
+            try await body()
+        }
     }
 }
