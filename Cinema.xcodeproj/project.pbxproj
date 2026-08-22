@@ -51,6 +51,9 @@
 				Views/visionOS/ProfileButton.swift = (
 					xros,
 				);
+				Views/visionOS/TheaterSeatPanel.swift = (
+					xros,
+				);
 			};
 			target = C4462E7029AAAB2E00E3C854 /* Cinema */;
 		};

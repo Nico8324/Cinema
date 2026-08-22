@@ -132,7 +132,6 @@ import Theater
         var transform = container.transform
         transform.translation = seat.roomTransform
         container.move(to: transform, relativeTo: nil, duration: TheaterScene.seatMoveDuration, timingFunction: .easeInOut)
-        TheaterScene.refreshSeatMarkers(in: container, current: seat)
     }
 
     public func clearEnvironment() {
