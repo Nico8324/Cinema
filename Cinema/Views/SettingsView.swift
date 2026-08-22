@@ -210,7 +210,28 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    // The folder first: it is where the library comes from, and on the Mac the two
+                    // are one idea rather than two — a library *is* a folder you pointed at.
+                    #if os(macOS)
+                    if mediaFolderPath.isEmpty {
+                        Button("Choose Folder…") { isChoosingMediaFolder = true }
+                    } else {
+                        LabeledContent("Folder") {
+                            Text(URL(filePath: mediaFolderPath).lastPathComponent)
+                                .foregroundStyle(.secondary)
+                                .truncationMode(.middle)
+                                .help(mediaFolderPath)
+                        }
+                    }
+                    #endif
                     LabeledContent("Videos", value: "\(videos.count)")
+                    #if os(macOS)
+                    if !mediaFolderPath.isEmpty, let scanSummary {
+                        Text(scanSummary)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    #endif
                     if let progress = refreshProgress {
                         HStack {
                             Text("Refreshing Metadata…")
@@ -229,29 +250,10 @@ struct SettingsView: View {
                         }
                         .disabled(!hasMatchedTitles)
                     }
-                    Button("Clear Library", role: .destructive) {
-                        isConfirmingClear = true
-                    }
-                    .disabled(videos.isEmpty)
-                } header: {
-                    Text("Library")
-                } footer: {
-                    Text("Refresh Metadata re-downloads titles, artwork, and details from The Movie Database for every matched video and show.")
-                }
-
-                #if os(macOS)
-                Section {
-                    if mediaFolderPath.isEmpty {
-                        Button("Choose Folder…") { isChoosingMediaFolder = true }
-                    } else {
-                        LabeledContent("Folder") {
-                            Text(URL(filePath: mediaFolderPath).lastPathComponent)
-                                .foregroundStyle(.secondary)
-                                .truncationMode(.middle)
-                                .help(mediaFolderPath)
-                        }
+                    #if os(macOS)
+                    if !mediaFolderPath.isEmpty {
                         HStack {
-                            Button("Change…") { isChoosingMediaFolder = true }
+                            Button("Change Folder…") { isChoosingMediaFolder = true }
                                 .disabled(isScanningFolder)
                             Button("Scan Now") { scanMediaFolder() }
                                 .disabled(isScanningFolder)
@@ -259,20 +261,32 @@ struct SettingsView: View {
                                 ProgressView().controlSize(.small)
                             }
                             Spacer()
-                            Button("Stop Scanning", role: .destructive) { mediaFolderPath = "" }
-                        }
-                        if let scanSummary {
-                            Text(scanSummary)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                            Button("Stop Watching", role: .destructive) { mediaFolderPath = "" }
                         }
                     }
+                    #endif
+                    Button("Clear Library", role: .destructive) {
+                        isConfirmingClear = true
+                    }
+                    .disabled(videos.isEmpty)
                 } header: {
-                    Text("Media Folder")
+                    Text("Library")
                 } footer: {
-                    Text("Videos in this folder are added to your library and played where they are — they aren't copied, and Cinema never moves or deletes them. The folder is rescanned each time the app opens.")
+                    #if os(macOS)
+                    Text("""
+                        Videos in this folder are your library. They're played where they are — \
+                        never copied, moved or deleted — and the folder is rescanned each time the \
+                        app opens.
+
+                        Refresh Metadata re-downloads titles, artwork and details from The Movie \
+                        Database for every matched video and show.
+                        """)
+                    #else
+                    Text("Refresh Metadata re-downloads titles, artwork, and details from The Movie Database for every matched video and show.")
+                    #endif
                 }
 
+                #if os(macOS)
                 Section {
                     LabeledContent("Video Tools") {
                         Label {

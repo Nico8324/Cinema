@@ -162,6 +162,7 @@ struct ConversionPlan: Sendable, Identifiable, Equatable {
     /// facts, and nothing that touches the disk.
     static func plan(source: SourceMedia, letterbox: Letterbox,
                      cropsWhenItCosts: Bool = ConversionPlan.cropsWhenItCostsAnEncode,
+                     calibration: ConversionCalibration = .current,
                      canRebuildDolbyVision: Bool = ConverterTools.canConvertDolbyVision,
                      forcingEncode: Bool = false,
                      matchesApplesBitrate: Bool = !ConversionPlan.keepsSourceQuality) -> ConversionPlan {
@@ -172,7 +173,7 @@ struct ConversionPlan: Sendable, Identifiable, Equatable {
             source: source,
             letterbox: letterbox,
             route: route,
-            estimate: ConversionEstimate(source: source, route: route),
+            estimate: ConversionEstimate(source: source, route: route, calibration: calibration),
             notes: notes(for: source, letterbox: letterbox, route: route,
                          canRebuildDolbyVision: canRebuildDolbyVision, forcedEncode: forcingEncode,
                          matchesApplesBitrate: matchesApplesBitrate)
@@ -339,8 +340,12 @@ struct ConversionEstimate: Sendable, Equatable {
 
     var total: Double { encode + finish }
 
-    init(source: SourceMedia, route: ConversionPlan.Route) {
-        let calibration = ConversionCalibration.current
+    /// - Parameter calibration: the machine's measured rates. Injectable so an estimate can be
+    ///   reasoned about without depending on what this particular Mac has learned — reading
+    ///   `.current` directly made every estimate a function of live `UserDefaults`, so a real
+    ///   conversion finishing could change what a test computed, and did.
+    init(source: SourceMedia, route: ConversionPlan.Route,
+         calibration: ConversionCalibration = .current) {
         let sourceGigabytes = Double(source.fileSize) / 1_000_000_000
 
         switch route.encode {

@@ -2376,6 +2376,47 @@
         }
       }
     },
+    "Change Folder…": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordner ändern …"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changer de dossier…"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "फ़ोल्डर बदलें…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォルダを変更…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "폴더 변경…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更改文件夹…"
+          }
+        }
+      }
+    },
     "Change…": {
       "localizations": {
         "de": {
@@ -8595,6 +8636,47 @@
         }
       }
     },
+    "Stop Watching": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht mehr überwachen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ne plus surveiller"
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "देखना बंद करें"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "監視を停止"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "감시 중단"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "停止监视"
+          }
+        }
+      }
+    },
     "Studio": {
       "comment": "Show Studio environment",
       "localizations": {
@@ -10461,6 +10543,47 @@
           "stringUnit": {
             "state": "translated",
             "value": "此文件夹中的视频将添加到您的库中，并在其位置播放 — 它们不会被复制，Cinema 永远不会移动或删除它们。每次应用打开时都会重新扫描该文件夹。"
+          }
+        }
+      }
+    },
+    "Videos in this folder are your library. They're played where they are — never copied, moved or deleted — and the folder is rescanned each time the app opens.\n\nRefresh Metadata re-downloads titles, artwork and details from The Movie Database for every matched video and show.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Videos in diesem Ordner sind deine Mediathek. Sie werden dort abgespielt, wo sie liegen — nie kopiert, verschoben oder gelöscht — und der Ordner wird bei jedem Start neu durchsucht.\n\nMetadaten aktualisieren lädt Titel, Artwork und Details für jedes zugeordnete Video und jede Serie erneut von The Movie Database."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les vidéos de ce dossier constituent votre bibliothèque. Elles sont lues là où elles se trouvent — jamais copiées, déplacées ni supprimées — et le dossier est réanalysé à chaque ouverture de l’app.\n\nActualiser les métadonnées retélécharge les titres, les visuels et les détails depuis The Movie Database pour chaque vidéo et série identifiée."
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "इस फ़ोल्डर के वीडियो ही आपकी लाइब्रेरी हैं। वे जहाँ हैं वहीं चलाए जाते हैं — कभी कॉपी, स्थानांतरित या हटाए नहीं जाते — और ऐप खुलने पर फ़ोल्डर हर बार फिर से स्कैन होता है।\n\nमेटाडेटा रिफ़्रेश करें हर मिलान किए गए वीडियो और शो के लिए The Movie Database से शीर्षक, आर्टवर्क और विवरण दोबारा डाउनलोड करता है।"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このフォルダ内のビデオがライブラリです。コピー・移動・削除されることはなく、その場所のまま再生されます。フォルダはアプリを開くたびに再スキャンされます。\n\n「メタデータを更新」は、一致したすべてのビデオと番組について、タイトル・アートワーク・詳細を The Movie Database から再ダウンロードします。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 폴더의 비디오가 라이브러리입니다. 복사·이동·삭제하지 않고 있는 자리에서 재생하며, 앱을 열 때마다 폴더를 다시 검사합니다.\n\n'메타데이터 새로 고침'은 일치하는 모든 비디오와 프로그램의 제목, 아트워크, 세부 정보를 The Movie Database에서 다시 내려받습니다。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此文件夹中的视频就是你的资料库。它们在原位播放——从不复制、移动或删除——每次打开 App 时都会重新扫描该文件夹。\n\n“刷新元数据”会为每个已匹配的视频和剧集从 The Movie Database 重新下载标题、插图和详细信息。"
           }
         }
       }

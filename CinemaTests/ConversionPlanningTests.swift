@@ -242,12 +242,12 @@ struct ConversionPlanningTests {
         let bars = Letterbox.bars(height: 1604, top: 278)
 
         let kept = ConversionPlan.plan(source: copyable, letterbox: bars, cropsWhenItCosts: false,
-                                       canRebuildDolbyVision: false)
+                                       calibration: .measured, canRebuildDolbyVision: false)
         #expect(kept.route == .rewrap)
         #expect(kept.notes.contains { if case .barsKeptToAvoidAnEncode = $0 { true } else { false } })
 
         let cropped = ConversionPlan.plan(source: copyable, letterbox: bars, cropsWhenItCosts: true,
-                                          canRebuildDolbyVision: false)
+                                          calibration: .measured, canRebuildDolbyVision: false)
         #expect(cropped.route.encode?.height == 1604)
         #expect(cropped.notes.contains(.encodedOnlyToCrop))
         #expect(cropped.estimate.total > kept.estimate.total * 4)
@@ -298,9 +298,9 @@ struct ConversionPlanningTests {
         // A real 1080p episode: rewrapping is bound by writing 14 GB, encoding by the pixels.
         let source = media(codec: "h264", width: 1920, height: 1080, duration: 4875,
                            fileSize: 14_000_000_000)
-        let rewrap = ConversionEstimate(source: source, route: .rewrap)
+        let rewrap = ConversionEstimate(source: source, route: .rewrap, calibration: .measured)
         let encode = ConversionEstimate(source: source, route: .reencode(
-            .init(width: 1920, height: 1080, bitrate: 7_000_000, cropTop: nil)))
+            .init(width: 1920, height: 1080, bitrate: 7_000_000, cropTop: nil)), calibration: .measured)
         #expect(rewrap.encode == 0)
         #expect(rewrap.total < encode.total / 4)
     }
