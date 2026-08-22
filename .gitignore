@@ -28,3 +28,7 @@ Cinema/Model/Data/Secrets.swift
 
 # Personal screen captures — never for the public repo (frames of films are a rights risk).
 new screen/
+
+# Python bytecode caches, which embed absolute paths from whoever ran the script.
+__pycache__/
+*.pyc
