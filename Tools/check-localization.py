@@ -36,7 +36,15 @@ CATALOG = REPO / "Cinema/Resources/Localizable.xcstrings"
 DESTINATION = "platform=macOS"
 
 
-SPECIFIER = re.compile(r"%%|%(\d+)\$([@a-zA-Z]+)|%([@a-zA-Z]+)")
+# printf's actual grammar, not "a run of letters". `%llds` is `%lld` followed by a literal `s`,
+# and a greedy letter run reads it as one specifier of type "llds" — which then fails to match a
+# translation that correctly writes `%lld` and puts the `s` somewhere else. The checker was
+# rejecting the translation for being right.
+_LENGTH = r"(?:hh|h|ll|l|q|L|z|t|j)?"
+_CONVERSION = r"[diufFeEgGxXoscpaA@]"
+SPECIFIER = re.compile(
+    rf"%%|%(\d+)\$[-+ #0]*[\d*]*(?:\.[\d*]+)?({_LENGTH}{_CONVERSION})"
+    rf"|%[-+ #0]*[\d*]*(?:\.[\d*]+)?({_LENGTH}{_CONVERSION})")
 
 
 def argument_types(text: str) -> list[str] | None:

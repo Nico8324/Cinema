@@ -94,6 +94,30 @@ struct WatchedStateTests {
         #expect(show.nextEpisode == nil)
     }
 
+    /// A film has no next episode, and rolling from one film into an unrelated one is what a
+    /// channel does rather than a library. The offer is for series only.
+    @Test func afilmQueuesNothing() throws {
+        let context = try TestSupport.freshContext()
+        let movie = film("Sinners")
+        context.insert(movie)
+        try context.save()
+        #expect(!movie.isEpisode)
+        #expect(movie.show?.nextEpisode == nil)
+    }
+
+    /// The last episode of a finished series queues nothing, rather than looping to the first.
+    @Test func theEndOfASeriesQueuesNothing() throws {
+        let context = try TestSupport.freshContext()
+        let show = try #require(Show.findOrCreate(named: "Suits", in: context))
+        let only = episode("Suits", season: 1, number: 1)
+        context.insert(only)
+        only.show = show
+        try context.save()
+
+        only.markWatched()
+        #expect(show.nextEpisode == nil)
+    }
+
     /// Season order, not episode number: season 2 episode 1 follows season 1 episode 10.
     @Test func theNextEpisodeCrossesIntoTheFollowingSeason() throws {
         let context = try TestSupport.freshContext()

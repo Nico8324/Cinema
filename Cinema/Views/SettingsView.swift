@@ -33,6 +33,7 @@ struct SettingsView: View {
     @AppStorage(AutomaticConversion.enabledKey) private var convertsAutomatically = false
     @AppStorage(ConversionQueue.trashesOriginalsKey) private var trashesOriginals = false
     @State private var isTidying = false
+    @AppStorage(PlayerModel.playsNextEpisodeKey) private var playsNextEpisode = true
     @AppStorage(ConversionPlan.keepsSourceQualityKey) private var keepsSourceQuality = false
     @AppStorage(TrackPlan.singleLanguageKey) private var keepsOnlyOriginalLanguage = true
     #endif
@@ -142,6 +143,18 @@ struct SettingsView: View {
     /// The settings content, shared by every platform.
     @ViewBuilder
     private var sections: some View {
+                Section {
+                    Toggle("Play Next Episode Automatically", isOn: $playsNextEpisode)
+                } header: {
+                    Text("Playback")
+                } footer: {
+                    Text("""
+                        When an episode ends, the next one is offered with ten seconds to decline. \
+                        Only for series — a film has no next episode, and rolling from one film \
+                        into an unrelated one is what a channel does, not a library.
+                        """)
+                }
+
                 Section("Profile") {
                     NavigationLink {
                         EditProfileView()

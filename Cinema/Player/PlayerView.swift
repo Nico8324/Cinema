@@ -52,6 +52,14 @@ struct PlayerView: View {
         switch controlsStyle {
         case .system:
             systemPlayerView
+                .overlay(alignment: .bottomTrailing) {
+                    // Over the player rather than inside its controls: `AVPlayerViewController`
+                    // owns its chrome, and the contextual-action route it does offer exists only
+                    // on visionOS and tvOS. An overlay is the one placement all four platforms
+                    // share.
+                    NextEpisodeOverlay()
+                        .animation(.snappy, value: model.pendingNextEpisode?.id)
+                }
                 .onChange(of: model.shouldProposeNextVideo) {
                     showContextualActions = model.shouldProposeNextVideo
                 }

@@ -28,6 +28,21 @@ enum Presentation {
     /// The currently loaded video.
     private(set) var currentItem: Video? = nil
 
+    /// Whether finishing an episode rolls into the following one on its own.
+    nonisolated static let playsNextEpisodeKey = "playsNextEpisodeAutomatically"
+    nonisolated static var playsNextEpisodeAutomatically: Bool {
+        UserDefaults.standard.object(forKey: playsNextEpisodeKey) as? Bool ?? true
+    }
+
+    /// The episode queued to follow this one, and how long until it starts.
+    ///
+    /// Held as state rather than started immediately so there is somewhere to say no. An episode
+    /// that begins the instant the credits roll is the behaviour people turn the whole feature off
+    /// over — the countdown is what makes it a suggestion instead of a decision.
+    private(set) var pendingNextEpisode: Video?
+    private(set) var secondsUntilNextEpisode = 0
+    private var nextEpisodeCountdown: Task<Void, Never>?
+
     /// A Boolean value that indicates whether the player should propose playing the next video in the Up Next list.
     private(set) var shouldProposeNextVideo = false
 
@@ -204,6 +219,7 @@ enum Presentation {
                 // opened, and there was no other way the app could learn what you had seen.
                 self.currentItem?.markWatched()
                 self.modelContext.saveReportingErrors()
+                self.offerNextEpisode()
             }
         })
 
@@ -247,6 +263,7 @@ enum Presentation {
     ///   - presentation: The style in which to present the player.
     ///   - autoplay: A Boolean value that indicates whether to automatically play the content when presented.
     func loadVideo(_ video: Video, presentation: Presentation = .inline, autoplay: Bool = true) {
+        cancelNextEpisode()
         // Update the model state for the request.
         currentItem = video
         shouldAutoPlay = autoplay
@@ -373,6 +390,49 @@ enum Presentation {
         modelContext.saveReportingErrors()
     }
 
+    // MARK: - The next episode
+
+    /// Queues the episode that follows this one, if there is one and it has been asked for.
+    ///
+    /// Only for episodes. A film has no "next" that means anything, and rolling from one film into
+    /// an unrelated one is the behaviour of a channel rather than a library.
+    private func offerNextEpisode() {
+        cancelNextEpisode()
+        guard Self.playsNextEpisodeAutomatically,
+              let finished = currentItem, finished.isEpisode,
+              let next = finished.show?.nextEpisode, next.id != finished.id
+        else { return }
+
+        pendingNextEpisode = next
+        secondsUntilNextEpisode = 10
+        nextEpisodeCountdown = Task { [weak self] in
+            while let self, self.secondsUntilNextEpisode > 0 {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { return }
+                self.secondsUntilNextEpisode -= 1
+            }
+            guard let self, !Task.isCancelled else { return }
+            self.playNextEpisodeNow()
+        }
+    }
+
+    /// Starts the queued episode straight away.
+    func playNextEpisodeNow() {
+        guard let next = pendingNextEpisode else { return }
+        cancelNextEpisode()
+        loadVideo(next, presentation: presentation)
+    }
+
+    /// Drops the queued episode. Called when someone says no, and whenever anything else takes
+    /// over the player — a countdown that survives the video being changed underneath it would
+    /// start an episode nobody was watching towards.
+    func cancelNextEpisode() {
+        nextEpisodeCountdown?.cancel()
+        nextEpisodeCountdown = nil
+        pendingNextEpisode = nil
+        secondsUntilNextEpisode = 0
+    }
+
     /// Lets go of a video that is about to be deleted from the library.
     ///
     /// Called *before* the model row is deleted. The player otherwise keeps its reference,
@@ -390,6 +450,9 @@ enum Presentation {
 
     /// Clears any loaded media and resets the player model to its default state.
     func reset() {
+        // Whatever else happens below, a queued episode must not survive the player being torn
+        // down — it would start playing into a window that had already gone.
+        cancelNextEpisode()
         // The app's player UI disappearing is the *start* of Picture in Picture, not the end of
         // playback: the video is still on screen in the floating window. Clearing the player item
         // here would kill that window the instant it appeared.
