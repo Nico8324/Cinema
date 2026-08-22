@@ -24,6 +24,8 @@ struct SettingsView: View {
     @AppStorage(ArtworkStyle.storageKey) private var artworkStyle: ArtworkStyle = .wide
 
     @State private var isConfirmingClear = false
+    @AppStorage(PlayerModel.playsNextEpisodeKey) private var playsNextEpisode = true
+
     #if os(macOS)
     @AppStorage(MediaFolderScanner.folderPathKey) private var mediaFolderPath = ""
 
@@ -33,7 +35,6 @@ struct SettingsView: View {
     @AppStorage(AutomaticConversion.enabledKey) private var convertsAutomatically = false
     @AppStorage(ConversionQueue.trashesOriginalsKey) private var trashesOriginals = false
     @State private var isTidying = false
-    @AppStorage(PlayerModel.playsNextEpisodeKey) private var playsNextEpisode = true
     @AppStorage(ConversionPlan.keepsSourceQualityKey) private var keepsSourceQuality = false
     @AppStorage(TrackPlan.singleLanguageKey) private var keepsOnlyOriginalLanguage = true
     #endif

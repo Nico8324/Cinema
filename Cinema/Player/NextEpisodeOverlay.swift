@@ -35,10 +35,16 @@ struct NextEpisodeOverlay: View {
                         Label("Play", systemImage: "play.fill")
                             .frame(maxWidth: .infinity)
                     }
+                    #if !os(tvOS)
+                    // Return plays, Escape declines. tvOS has no keyboard and no such modifier;
+                    // its remote drives the focused button directly.
                     .keyboardShortcut(.defaultAction)
+                    #endif
 
                     Button("Cancel") { model.cancelNextEpisode() }
+                    #if !os(tvOS)
                         .keyboardShortcut(.cancelAction)
+                    #endif
                 }
                 .buttonStyle(.borderedProminent)
 
