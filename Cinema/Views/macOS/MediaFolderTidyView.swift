@@ -58,9 +58,14 @@ struct MediaFolderTidyView: View {
 
     private var subtitle: String {
         if let outcome {
+            // The count is formatted separately rather than pinned into the sentence with an
+            // English `"s"`. A ternary picking a suffix is not translatable at all: German needs
+            // "Datei"/"Dateien", Japanese needs no plural, and Polish needs three forms — none of
+            // which a suffix can express. `inflect` hands the plural to the language.
+            let renamed = String(localized: "^[\(outcome.moved) file](inflect: true)")
             return outcome.failed.isEmpty
-                ? String(localized: "Renamed \(outcome.moved) file\(outcome.moved == 1 ? "" : "s"). Your library now points at the new names.")
-                : String(localized: "Renamed \(outcome.moved) file\(outcome.moved == 1 ? "" : "s"). \(outcome.failed.count) couldn’t be moved and were left alone.")
+                ? String(localized: "Renamed \(renamed). Your library now points at the new names.")
+                : String(localized: "Renamed \(renamed). \(outcome.failed.count) couldn’t be moved and were left alone.")
         }
         if moves.isEmpty {
             return String(localized: "Every converted video is already named the way Cinema would name it today.")

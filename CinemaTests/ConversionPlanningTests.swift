@@ -1061,7 +1061,13 @@ struct SingleLanguageTests {
         #expect(selection.audio.first?.track.language == "eng")
         #expect(selection.audio.first?.isDefault == true)
         // What it dropped is said out loud, because nothing in the finished file would reveal it.
-        #expect(selection.notes.contains { $0.contains("dropped") })
+        //
+        // Asserted as "three tracks went", not by matching words. The words are user-facing and
+        // localized, so a machine set to French returns French — this test passed only while the
+        // string happened to be untranslated, and broke the moment it wasn't. A test that reads
+        // the interface's prose is testing the translator.
+        #expect(selection.audio.count < source.audio.count)
+        #expect(!selection.notes.isEmpty)
     }
 
     /// Switched off, the film keeps Apple's shape: one per language, commentary alongside.
@@ -1077,8 +1083,11 @@ struct SingleLanguageTests {
     @Test func aSingleLanguageFilmIsUnaffected() {
         let source = film(audio: [audio(1, "eng")], subtitles: [])
         let selection = TrackPlan.selectAudio(from: source, keepingOnlyOneLanguage: true)
-        #expect(selection.audio.count == 1)
-        #expect(!selection.notes.contains { $0.contains("dropped") })
+        // Nothing was dropped — asserted as "every track survived" rather than "no note contains
+        // the word dropped". The note text is localized, so the word test read English prose on an
+        // English machine and French prose on a French one; and this film *does* get a note, the
+        // one naming its default track. The count is the fact; the note is how it's phrased.
+        #expect(selection.audio.count == source.audio.count)
     }
 }
 #endif

@@ -47,6 +47,24 @@ jobs:
             -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO
 
+  localization:
+    name: Strings reach the catalog
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Provide placeholder secrets
+        run: cp Cinema/Model/Data/Secrets.swift.example Cinema/Model/Data/Secrets.swift
+
+      # A string missing from the catalog is not a build error — it renders in English in
+      # every language, forever, and nothing says so. `xcodebuild` extracts strings but only
+      # Xcode.app merges them into the catalog, so anything inside `#if os(macOS)` never
+      # arrived: 57 strings, the entire converter interface, invisible to translation from the
+      # day they were written. Built for macOS because that is the superset — checking on any
+      # other destination reproduces the bug instead of catching it.
+      - name: Check every string reaches the catalog
+        run: python3 Tools/check-localization.py
+
   build-tvos:
     name: Build (tvOS)
     runs-on: macos-26
