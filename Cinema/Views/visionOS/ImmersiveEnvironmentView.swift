@@ -23,6 +23,13 @@ struct ImmersiveEnvironmentView: View {
     /// Whether the seat panel is open above the floor icon.
     @State private var isSeatPanelOpen = false
 
+    /// How far the Digital Crown has dialed the room in, 0...1.
+    ///
+    /// Below full immersion the environment is visible only inside the portal around the
+    /// forward view, and the floor at the feet is the last region to enter it — an icon taped
+    /// there would be hidden. The controls lift into the sightline while dialed down.
+    @State private var immersionAmount: Double = 1
+
     var body: some View {
         RealityView { content, attachments in
             if let rootEntity = immersiveEnvironment.rootEntity {
@@ -48,6 +55,9 @@ struct ImmersiveEnvironmentView: View {
                 }
             }
         }
+        .onImmersionChange { _, context in
+            immersionAmount = context.amount ?? 1
+        }
         .onDisappear {
             immersiveEnvironment.immersiveSpaceState = .closed
             immersiveEnvironment.clearEnvironment()
@@ -72,11 +82,21 @@ struct ImmersiveEnvironmentView: View {
         // The orchestra's carpet is the room's floor plane; the balcony has no modelled
         // tier, so its icon sits where the tier floor would be beneath the seat.
         let floorY: Float = seat.level == .floor ? TheaterScene.floorY + 0.01 : seat.eyeOffset.y - 1.25
+        let fullyImmersed = immersionAmount >= 0.95
 
         if let marker = attachments.entity(for: Self.markerID) {
             if marker.parent !== room { room.addChild(marker) }
-            marker.position = [0, floorY, seat.eyeOffset.z - 0.5]
-            marker.orientation = simd_quatf(angle: -.pi / 2, axis: [1, 0, 0])
+            var transform = Transform()
+            if fullyImmersed {
+                // Taped to the floor at the feet.
+                transform.translation = [0, floorY, seat.eyeOffset.z - 0.5]
+                transform.rotation = simd_quatf(angle: -.pi / 2, axis: [1, 0, 0])
+            } else {
+                // Dialed down: lifted into the visible portal, low in the sightline.
+                transform.translation = seat.eyeOffset + [0, -0.45, -1.1]
+                transform.rotation = simd_quatf(angle: -0.4, axis: [1, 0, 0])
+            }
+            marker.move(to: transform, relativeTo: room, duration: 0.35, timingFunction: .easeInOut)
         }
         if let panel = attachments.entity(for: Self.panelID) {
             if panel.parent !== room { room.addChild(panel) }
