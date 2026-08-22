@@ -716,15 +716,28 @@ struct ConversionPlanningTests {
 
     // MARK: - Automatic conversion
 
-    /// Both of these are off until someone turns them on, and the test exists because a default is
-    /// the one setting nobody chooses. Converting spends hours of the machine unattended, and
-    /// trashing moves a file the person may still want — neither is a state to discover you were
-    /// already in.
-    @Test func convertingAutomaticallyAndTrashingAreBothOffUntilAskedFor() {
+    /// Both of these are **on** out of the box, changed deliberately from off after the converter
+    /// had been run over a real library and trusted.
+    ///
+    /// The test stays because the defaults are the point, not because of which way they point:
+    /// converting spends hours of the machine unattended and trashing moves a file someone may
+    /// still want, so these are the two settings whose default should never drift by accident.
+    /// Nothing is deleted outright and a conversion that fails any check leaves its original
+    /// untouched, which is what makes shipping them on defensible.
+    @Test func convertingAutomaticallyAndTrashingAreOnOutOfTheBox() {
         UserDefaults.standard.removeObject(forKey: AutomaticConversion.enabledKey)
         UserDefaults.standard.removeObject(forKey: ConversionQueue.trashesOriginalsKey)
+        UserDefaults.standard.removeObject(forKey: ConversionPlan.cropCostingAnEncodeKey)
+        #expect(AutomaticConversion.isEnabled)
+        #expect(ConversionQueue.trashesOriginals)
+        #expect(ConversionPlan.cropsWhenItCostsAnEncode)
+    }
+
+    /// Turning one off still turns it off — a default that can't be overridden isn't a default.
+    @Test func anExplicitChoiceStillWins() {
+        UserDefaults.standard.set(false, forKey: AutomaticConversion.enabledKey)
+        defer { UserDefaults.standard.removeObject(forKey: AutomaticConversion.enabledKey) }
         #expect(!AutomaticConversion.isEnabled)
-        #expect(!ConversionQueue.trashesOriginals)
     }
 
     /// A source is moved rather than removed, so a wrong judgement about bitrate stays recoverable

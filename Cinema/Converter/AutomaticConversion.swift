@@ -24,7 +24,9 @@ import os
 @MainActor
 final class AutomaticConversion {
     nonisolated static let enabledKey = "convertsAutomatically"
-    nonisolated static var isEnabled: Bool { UserDefaults.standard.bool(forKey: enabledKey) }
+    nonisolated static var isEnabled: Bool {
+        UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true
+    }
 
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Cinema",
                                        category: "AutoConvert")

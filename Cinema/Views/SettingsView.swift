@@ -31,9 +31,9 @@ struct SettingsView: View {
 
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
-    @AppStorage(ConversionPlan.cropCostingAnEncodeKey) private var cropsWhenItCostsAnEncode = false
-    @AppStorage(AutomaticConversion.enabledKey) private var convertsAutomatically = false
-    @AppStorage(ConversionQueue.trashesOriginalsKey) private var trashesOriginals = false
+    @AppStorage(ConversionPlan.cropCostingAnEncodeKey) private var cropsWhenItCostsAnEncode = true
+    @AppStorage(AutomaticConversion.enabledKey) private var convertsAutomatically = true
+    @AppStorage(ConversionQueue.trashesOriginalsKey) private var trashesOriginals = true
     @State private var isTidying = false
     @AppStorage(ConversionPlan.keepsSourceQualityKey) private var keepsSourceQuality = false
     @AppStorage(TrackPlan.singleLanguageKey) private var keepsOnlyOriginalLanguage = true
@@ -144,18 +144,6 @@ struct SettingsView: View {
     /// The settings content, shared by every platform.
     @ViewBuilder
     private var sections: some View {
-                Section {
-                    Toggle("Play Next Episode Automatically", isOn: $playsNextEpisode)
-                } header: {
-                    Text("Playback")
-                } footer: {
-                    Text("""
-                        When an episode ends, the next one is offered with ten seconds to decline. \
-                        Only for series — a film has no next episode, and rolling from one film \
-                        into an unrelated one is what a channel does, not a library.
-                        """)
-                }
-
                 Section("Profile") {
                     NavigationLink {
                         EditProfileView()
@@ -172,6 +160,53 @@ struct SettingsView: View {
                             }
                         }
                     }
+                }
+
+                Section {
+                    Picker("Appearance", selection: $appearance) {
+                        ForEach(AppearanceSetting.allCases) { setting in
+                            Text(setting.displayName).tag(setting)
+                        }
+                    }
+                    Picker("Artwork", selection: $artworkStyle) {
+                        ForEach(ArtworkStyle.allCases) { style in
+                            Text(style.displayName).tag(style)
+                        }
+                    }
+                } header: {
+                    Text("Appearance")
+                } footer: {
+                    Text("Automatic follows your device’s light or dark setting. Artwork chooses the shape of every card in your library: wide scene images, or portrait posters.")
+                }
+
+                Section {
+                    Toggle("Play Next Episode Automatically", isOn: $playsNextEpisode)
+                } header: {
+                    Text("Playback")
+                } footer: {
+                    Text("""
+                        When an episode ends, the next one is offered with ten seconds to decline. \
+                        Only for series — a film has no next episode, and rolling from one film \
+                        into an unrelated one is what a channel does, not a library.
+                        """)
+                }
+
+
+                Section {
+                    Picker("Movies Row", selection: $discoveryList) {
+                        ForEach(TMDB.MovieList.allCases) { list in
+                            Text(list.displayName).tag(list)
+                        }
+                    }
+                    Picker("Shows Row", selection: $tvDiscoveryList) {
+                        ForEach(TMDB.ShowList.allCases) { list in
+                            Text(list.displayName).tag(list)
+                        }
+                    }
+                } header: {
+                    Text("Watch Now")
+                } footer: {
+                    Text("Which movies and TV shows from The Movie Database appear at the bottom of Watch Now.")
                 }
 
                 Section {
@@ -202,38 +237,6 @@ struct SettingsView: View {
                     Text("Library")
                 } footer: {
                     Text("Refresh Metadata re-downloads titles, artwork, and details from The Movie Database for every matched video and show.")
-                }
-
-                Section {
-                    Picker("Appearance", selection: $appearance) {
-                        ForEach(AppearanceSetting.allCases) { setting in
-                            Text(setting.displayName).tag(setting)
-                        }
-                    }
-                    Picker("Artwork", selection: $artworkStyle) {
-                        ForEach(ArtworkStyle.allCases) { style in
-                            Text(style.displayName).tag(style)
-                        }
-                    }
-                } footer: {
-                    Text("Automatic follows your device’s light or dark setting. Artwork chooses the shape of every card in your library: wide scene images, or portrait posters.")
-                }
-
-                Section {
-                    Picker("Movies Row", selection: $discoveryList) {
-                        ForEach(TMDB.MovieList.allCases) { list in
-                            Text(list.displayName).tag(list)
-                        }
-                    }
-                    Picker("Shows Row", selection: $tvDiscoveryList) {
-                        ForEach(TMDB.ShowList.allCases) { list in
-                            Text(list.displayName).tag(list)
-                        }
-                    }
-                } header: {
-                    Text("Watch Now")
-                } footer: {
-                    Text("Which movies and TV shows from The Movie Database appear at the bottom of Watch Now.")
                 }
 
                 #if os(macOS)
@@ -292,12 +295,6 @@ struct SettingsView: View {
                             .disabled(didCopyInstallCommand)
                         }
                     }
-                    Toggle("Convert Automatically", isOn: $convertsAutomatically)
-                    Toggle("Move Originals to Trash", isOn: $trashesOriginals)
-                        .disabled(!convertsAutomatically)
-                    Toggle("Keep Original Quality", isOn: $keepsSourceQuality)
-                    Toggle("One Language Only", isOn: $keepsOnlyOriginalLanguage)
-                    Toggle("Crop Black Bars", isOn: $cropsWhenItCostsAnEncode)
                     Button("Show Conversion Queue…") {
                         openWindow(id: ConversionQueueView.windowID)
                     }
@@ -308,41 +305,62 @@ struct SettingsView: View {
                     Text("Conversion")
                 } footer: {
                     Text("""
-                        Videos that aren’t MP4 — MKV and the rest — can’t join your library until they’re \
-                        converted. Cinema uses the tools already installed on this Mac rather than shipping \
-                        copies of them, and never modifies your originals. Converting is available on Mac only.
-                        
-                        One Language Only keeps the language a film was made in and drops every dub, \
-                        commentary and foreign subtitle — a couple of per cent on one film, tens of \
-                        gigabytes across a hundred. Your originals keep everything, so a film can be \
-                        converted again with its other languages whenever you want them.
-                        
-                        Cinema aims for the file Apple would have made from the same source: a film \
-                        costing far more than Apple spends is rebuilt to Apple’s own rate, and a 74 GB \
-                        disc becomes about 22 GB. Keep Original Quality copies those films untouched \
-                        instead — the studio’s own picture and its black bars, at several times the size.
-                        
-                        Crop Black Bars re-encodes widescreen films that could otherwise be copied straight \
-                        across. Copying keeps the picture exactly as the studio mastered it and takes minutes; \
-                        cropping gives a frame without bars and takes hours.
-                        
-                        Convert Automatically converts anything you drop into the media folder without \
-                        being asked, one film at a time. It’s off to begin with, because a conversion \
-                        takes hours and makes choices about your films — the queue window shows what \
-                        those choices would be, and it’s worth reading a few before leaving it running.
-                        
-                        Tidy Media Folder renames videos converted before these rules existed — \
-                        the release group's name becomes the film's, and episodes move into folders \
-                        by show and season. It lists everything it would do first, and updates your \
-                        library so nothing stops playing.
-                        
-                        Move Originals to Trash puts each source in the Trash once its converted copy \
-                        has been checked for a picture that renders, a container that parses, Dolby \
-                        Vision an Apple device accepts, and frame-for-frame parity. A conversion that \
-                        fails any of those deletes itself and leaves the original where it is. Nothing \
-                        is ever deleted outright, so the Trash is your way back.
+                        Videos that aren’t MP4 — MKV and the rest — can’t join your library until \
+                        they’re converted. Cinema uses the tools already installed on this Mac \
+                        rather than shipping copies of them, and never modifies your originals.
+
+                        Tidy Media Folder renames videos converted before Cinema’s naming rules \
+                        existed and files episodes under their show and season. It lists everything \
+                        it would do first.
                         """)
                 }
+
+                Section {
+                    Toggle("Convert Automatically", isOn: $convertsAutomatically)
+                    Toggle("Move Originals to Trash", isOn: $trashesOriginals)
+                        .disabled(!convertsAutomatically)
+                } header: {
+                    Text("Automatic Conversion")
+                } footer: {
+                    Text("""
+                        Anything you drop into the media folder is converted without being asked, \
+                        one film at a time. Off to begin with, because a conversion takes hours and \
+                        makes choices about your films — the queue shows what those choices would \
+                        be, and it’s worth reading a few before leaving it running.
+
+                        Move Originals to Trash puts each source in the Trash once its converted \
+                        copy has been checked for a picture that renders, a container that parses, \
+                        Dolby Vision an Apple device accepts, and frame-for-frame parity. Anything \
+                        that fails deletes itself and leaves the original where it is. Nothing is \
+                        ever deleted outright, so the Trash is your way back.
+                        """)
+                }
+
+                Section {
+                    Toggle("Keep Original Quality", isOn: $keepsSourceQuality)
+                    Toggle("Crop Black Bars", isOn: $cropsWhenItCostsAnEncode)
+                    Toggle("One Language Only", isOn: $keepsOnlyOriginalLanguage)
+                } header: {
+                    Text("Conversion Quality")
+                } footer: {
+                    Text("""
+                        Cinema aims for the file Apple would have made from the same source: a film \
+                        costing far more than Apple spends is rebuilt to Apple’s own rate, and a \
+                        74 GB disc becomes about 22 GB. Keep Original Quality copies those films \
+                        untouched instead — the studio’s own picture and its black bars, at several \
+                        times the size.
+
+                        Crop Black Bars re-encodes widescreen films that could otherwise be copied \
+                        straight across. Copying keeps the picture exactly as the studio mastered it \
+                        and takes minutes; cropping gives a frame without bars and takes hours.
+
+                        One Language Only keeps the language a film was made in and drops every dub, \
+                        commentary and foreign subtitle — tens of gigabytes across a hundred films. \
+                        Your originals keep everything, so a film can be converted again with its \
+                        other languages whenever you want them.
+                        """)
+                }
+
                 #endif
 
                 Section("About") {

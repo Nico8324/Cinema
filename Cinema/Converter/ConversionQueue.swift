@@ -100,7 +100,7 @@ final class ConversionQueue {
     /// what makes that recoverable by the person rather than by a backup.
     nonisolated static let trashesOriginalsKey = "trashesOriginalsAfterConverting"
     nonisolated static var trashesOriginals: Bool {
-        UserDefaults.standard.bool(forKey: trashesOriginalsKey)
+        UserDefaults.standard.object(forKey: trashesOriginalsKey) as? Bool ?? true
     }
 
     /// Extensions worth offering to convert. MP4 and M4V are already the destination.

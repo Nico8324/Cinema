@@ -111,7 +111,7 @@ struct ConversionPlan: Sendable, Identifiable, Equatable {
     static let cropCostingAnEncodeKey = "cropWhenItCostsAnEncode"
 
     static var cropsWhenItCostsAnEncode: Bool {
-        UserDefaults.standard.bool(forKey: cropCostingAnEncodeKey)
+        UserDefaults.standard.object(forKey: cropCostingAnEncodeKey) as? Bool ?? true
     }
 
     /// Whether to keep the source's own picture instead of matching what Apple ships.
