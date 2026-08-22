@@ -30,6 +30,10 @@ public enum TheaterScene {
 
     /// How long the room takes to glide to a newly chosen seat.
     public static let seatMoveDuration: TimeInterval = 0.85
+
+    /// The height of the orchestra's carpet in the room's coordinates (the authored floor
+    /// plane in `make_theater.py`).
+    public static let floorY: Float = -1.4
 }
 
 #endif

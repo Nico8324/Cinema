@@ -23,18 +23,11 @@ struct ImmersiveEnvironmentView: View {
     /// Whether the seat panel is open above the floor icon.
     @State private var isSeatPanelOpen = false
 
-    /// Anchored once to the viewer's head as the space opens: everything hung from it is
-    /// placed relative to where the person actually is and faces, which the space's world
-    /// origin is not (it is wherever the app launched or was last recentered).
-    @State private var headAnchor = AnchorEntity(.head)
-
     var body: some View {
         RealityView { content, attachments in
             if let rootEntity = immersiveEnvironment.rootEntity {
                 content.add(rootEntity)
             }
-            headAnchor.anchoring.trackingMode = .once
-            content.add(headAnchor)
             placeSeatControls(attachments)
         } update: { _, attachments in
             // Attachments are re-created when SwiftUI re-evaluates them (the space finishing
@@ -65,21 +58,29 @@ struct ImmersiveEnvironmentView: View {
         .transition(.opacity)
     }
 
-    /// Hangs the seat icon on the floor under the viewer and the panel low in front, both
-    /// relative to the head pose captured as the space opened.
+    /// Tapes the seat icon to the room's floor at the occupied seat, and hangs the panel low
+    /// in front of it.
+    ///
+    /// Both are children of the room, not of the viewer: the seat position is under the viewer
+    /// by construction, so the icon lands on the carpet at the feet without guessing eye
+    /// height or trusting the space's world origin (which is not under the viewer on device).
+    /// They ride the glide and re-seat themselves at the new position after every move.
     private func placeSeatControls(_ attachments: RealityViewAttachments) {
-        guard immersiveEnvironment.activeTheaterSeat != nil else { return }
+        guard let seat = immersiveEnvironment.activeTheaterSeat,
+              let room = immersiveEnvironment.rootEntity else { return }
+
+        // The orchestra's carpet is the room's floor plane; the balcony has no modelled
+        // tier, so its icon sits where the tier floor would be beneath the seat.
+        let floorY: Float = seat.level == .floor ? TheaterScene.floorY + 0.01 : seat.eyeOffset.y - 1.25
 
         if let marker = attachments.entity(for: Self.markerID) {
-            if marker.parent !== headAnchor { headAnchor.addChild(marker) }
-            // Flat on the floor, a little ahead of the feet — seated eye height assumed.
-            marker.position = [0, -1.25, -0.5]
+            if marker.parent !== room { room.addChild(marker) }
+            marker.position = [0, floorY, seat.eyeOffset.z - 0.5]
             marker.orientation = simd_quatf(angle: -.pi / 2, axis: [1, 0, 0])
         }
         if let panel = attachments.entity(for: Self.panelID) {
-            if panel.parent !== headAnchor { headAnchor.addChild(panel) }
-            // Low in front, tilted up toward the face: found by the same downward glance.
-            panel.position = [0, -0.5, -0.8]
+            if panel.parent !== room { room.addChild(panel) }
+            panel.position = seat.eyeOffset + [0, -0.5, -0.8]
             panel.orientation = simd_quatf(angle: -0.5, axis: [1, 0, 0])
             panel.isEnabled = isSeatPanelOpen
         }
