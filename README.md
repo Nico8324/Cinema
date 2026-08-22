@@ -12,7 +12,9 @@ Cinema is a personal video library app for iOS, iPadOS, macOS, tvOS, and visionO
 - **A real profile.** Set a name and photo from Settings.
 - **Native multiplatform UI.** Tab navigation and window customization built with SwiftUI, tailored to each platform.
 - **Conversion on the Mac.** MKV and other formats Apple's frameworks can't open are converted to MP4 beside the originals, keeping Dolby Vision, cropping letterbox bars where the studio declared them, and verifying the result before keeping it. The queue plans everything first — time, size, and what each film would lose.
+- **Conversion runs itself, if you let it.** Drop an MKV into the media folder and it is planned, converted, verified and added to the library without being asked — with the original moved to the Trash once the result has been checked. Converted files are named for the film rather than the release group, and episodes are filed under their show and season.
 - **Subtitles that know what they are.** Forced and deaf-and-hard-of-hearing tracks are identified by reading their cues, not by trusting flags a disc rip often omits or titles written in whatever language pressed the disc. SDH tracks are then marked so Apple's own players name them, turning two identical "English" entries into "English" and "English SDH".
+- **Television series are first-class.** A show has its own title, artwork and match rather than a copy on every episode, so it survives its last episode being deleted and two spellings of one name can't become two shows.
 - **visionOS immersive environments.** Play video inside the Studio, or in the Theater — a recreation of the Apple TV app's Cinema with six selectable seats across floor and balcony, where the room's ribbed ceiling and floor are lit by the picture itself.
 
 ## Architecture notes

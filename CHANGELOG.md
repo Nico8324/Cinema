@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-22
+
+The Mac converts what you drop in front of it, files the results properly, and a television series finally exists as more than a repeated string. Plus an audit's worth of defects — including one crash, and a feature that had never once run.
+
+### Added
+- **Conversion without asking.** Drop an MKV into the media folder and Cinema plans it, converts it, checks it and adds it to the library on its own, one film at a time. The folder is watched rather than polled, and a file still being copied in is reconsidered when the copying stops rather than half-read. Off until you turn it on, because a conversion is hours of work and a set of judgements about your film — the queue window exists so you can read those first.
+- **Originals to the Trash**, once a conversion has been checked for a picture that renders, a container a strict reader can parse to the end, Dolby Vision an Apple device accepts, and frame-for-frame parity with the source. Anything that fails deletes itself and leaves the original untouched, so your source outlives every failure. Never a delete — the Trash is the way back from a judgement you later disagree with.
+- **Converted files are named for the film**, not for the release group. `Predator__Badlands_615165C3.mkv` becomes `Predator Badlands (2025).mp4`, with the year taken from the film's own match where there is one. Episodes are filed under their show and season — `Suits/Season 01/Suits S01E01.mp4` — because a series is the one thing a flat folder genuinely cannot hold.
+- **Tidy Media Folder** (Settings ▸ Conversion) gives files converted before those rules the names they would get today. It lists every rename before doing anything, moves only files Cinema made, and updates the library as it goes so nothing stops playing.
+- **A television series is a real thing now.** Its title, its artwork and its match live on the show rather than being copied onto every episode, so a show survives its last episode being deleted, and two spellings of one name stop making two shows. Stored in schema V8.
+- **Subtitles that say what they are.** A forced track — the one carrying alien dialogue in a film you otherwise understand — is found even where the source only hints at it in a title, and an SDH track is told apart from an ordinary one even where nothing labels it. Where flags and titles fail, the cues themselves decide.
+- **SDH tracks are named in the picker**: two identical "English" entries become "English" and "English SDH".
+
+### Changed
+- The audio warning says what the soundtrack comes out as, not just that it must be rebuilt: "7.1 DTS audio re-encoded to 5.1".
+- Time estimates stop averaging against the rate the app ships with. Four films predicted at 22h10 took 12h57, every one wrong in the same direction.
+- The Mac keeps its library and its media in folders of Cinema's own, rather than at a path every unsandboxed app shares.
+- Every language now sees the converter in its own words. 57 strings had never been translated because they had never been *extracted* — a gap that leaves text in English forever and reports nothing. CI now fails when a string doesn't reach the catalog, and when a translation would crash by taking different arguments from its source.
+
+### Fixed
+- **The app crashed on launch.** A version in the migration plan referenced the live model classes instead of a snapshot of what it was, so the moment a later version added a relationship it described a shape that had never existed on disk.
+- **A finished conversion could be deleted because a probe failed.** The Dolby Vision check could not tell "couldn't read the file" from "the file has no Dolby Vision", and a failed check deletes the output.
+- **A conversion existed only as invisible work or a verified file.** Output is written under a temporary name and moved into place last of all, so quitting mid-encode leaves nothing behind that looks finished.
+- **Deleting a video while it played crashed the app** — deletion never told the player to let go.
+- Cue-based subtitle detection read the wrong stream and had never once fired.
+- The show identity the model healed now reaches every screen; a renamed file keeps its library row; two scans can't double the library; TMDB answers are checked before they are believed, and your own edits are no longer overwritten by them.
+
 ## [0.6.0] - 2026-08-21
 
 Five films converted overnight, and everything the batch got wrong is fixed. A subtitle track is now identified by reading it rather than by trusting what it claims about itself.
