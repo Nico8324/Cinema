@@ -49,8 +49,9 @@ struct ImmersiveEnvironmentView: View {
             Attachment(id: Self.panelID) {
                 if let seat = immersiveEnvironment.activeTheaterSeat {
                     TheaterSeatPanel(current: seat) { chosen in
-                        isSeatPanelOpen = false
                         Task { await immersiveEnvironment.switchTheaterSeat(to: chosen) }
+                    } close: {
+                        withAnimation(.snappy(duration: 0.25)) { isSeatPanelOpen = false }
                     }
                 }
             }
@@ -92,9 +93,12 @@ struct ImmersiveEnvironmentView: View {
                 transform.translation = [0, floorY, seat.eyeOffset.z - 0.5]
                 transform.rotation = simd_quatf(angle: -.pi / 2, axis: [1, 0, 0])
             } else {
-                // Dialed down: lifted into the visible portal, low in the sightline.
-                transform.translation = seat.eyeOffset + [0, -0.45, -1.1]
-                transform.rotation = simd_quatf(angle: -0.4, axis: [1, 0, 0])
+                // Dialed down: lifted into the visible portal. The portal grows outward from
+                // the forward view, so the lower the immersion the nearer the sightline this
+                // has to be — about 8 degrees down at the dial's floor, 20 near full.
+                let t = Float(max(0, min(1, (immersionAmount - 0.2) / 0.75)))
+                transform.translation = seat.eyeOffset + [0.25, -(0.15 + 0.25 * t), -1.1]
+                transform.rotation = simd_quatf(angle: -0.3, axis: [1, 0, 0])
             }
             marker.move(to: transform, relativeTo: room, duration: 0.35, timingFunction: .easeInOut)
         }

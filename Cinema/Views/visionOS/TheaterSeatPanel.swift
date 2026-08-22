@@ -29,42 +29,64 @@ struct TheaterSeatMarker: View {
 struct TheaterSeatPanel: View {
     var current: TheaterSeat
     var select: (TheaterSeat) -> Void
+    var close: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Row", comment: "Theater seat panel group")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            HStack(spacing: 8) {
-                ForEach(TheaterSeat.Row.allCases, id: \.self) { row in
-                    choice(row.displayName, isCurrent: row == current.row) {
-                        select(TheaterSeat(row: row, level: current.level))
+        VStack(alignment: .leading, spacing: 18) {
+            HStack {
+                Label {
+                    Text("Seats", comment: "Theater seat panel title")
+                        .font(.title3.weight(.semibold))
+                } icon: {
+                    Image(systemName: "chair.fill")
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button(action: close) {
+                    Image(systemName: "xmark")
+                        .font(.footnote.weight(.bold))
+                        .padding(8)
+                }
+                .buttonStyle(.borderless)
+                .glassBackgroundEffect(in: .circle)
+                .accessibilityLabel(Text("Close", comment: "Closes the Theater seat panel"))
+            }
+
+            group(Text("Row", comment: "Theater seat panel group")) {
+                Picker("", selection: Binding(
+                    get: { current.row },
+                    set: { select(TheaterSeat(row: $0, level: current.level)) }
+                )) {
+                    ForEach(TheaterSeat.Row.allCases, id: \.self) { row in
+                        Text(row.displayName).tag(row)
                     }
                 }
             }
-            Text("Height", comment: "Theater seat panel group")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            HStack(spacing: 8) {
-                ForEach(TheaterSeat.Level.allCases, id: \.self) { level in
-                    choice(level.displayName, isCurrent: level == current.level) {
-                        select(TheaterSeat(row: current.row, level: level))
+
+            group(Text("Height", comment: "Theater seat panel group")) {
+                Picker("", selection: Binding(
+                    get: { current.level },
+                    set: { select(TheaterSeat(row: current.row, level: $0)) }
+                )) {
+                    ForEach(TheaterSeat.Level.allCases, id: \.self) { level in
+                        Text(level.displayName).tag(level)
                     }
                 }
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 14)
-        .frame(minWidth: 320)
-        .glassBackgroundEffect()
+        .pickerStyle(.segmented)
+        .padding(24)
+        .frame(width: 380)
+        .glassBackgroundEffect(in: .rect(cornerRadius: 28))
     }
 
-    private func choice(_ title: String, isCurrent: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title).fontWeight(isCurrent ? .semibold : .regular)
+    private func group<Content: View>(_ title: Text, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            title
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            content()
         }
-        .buttonStyle(.bordered)
-        .tint(isCurrent ? Color.white : Color.secondary)
     }
 }
 
