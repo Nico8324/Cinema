@@ -132,6 +132,24 @@ final class Show {
         }
     }
 
+    /// The episode to offer next: the first unwatched one in broadcast order.
+    ///
+    /// First *unwatched*, not "the one after the last watched". Those differ whenever someone
+    /// skips ahead or rewatches, and the difference matters: offering episode 6 because they once
+    /// opened it leaves 4 and 5 stranded with nothing ever pointing at them again.
+    var nextEpisode: Video? {
+        episodesInOrder.first { !$0.isWatched }
+    }
+
+    /// Whether this series has been started but not finished — the condition for offering the next
+    /// episode at all. A show nobody has begun belongs in the library, not in Up Next.
+    var isInProgress: Bool {
+        let episodes = episodesInOrder
+        guard !episodes.isEmpty else { return false }
+        return episodes.contains(where: { $0.isWatched || $0.playbackPosition > 5 })
+            && episodes.contains(where: { !$0.isWatched })
+    }
+
     var seasonNumbers: [Int] {
         Array(Set((episodes ?? []).compactMap(\.seasonNumber))).sorted()
     }

@@ -52,6 +52,7 @@ struct LibraryView: View {
     @State private var navigationPath = [NavigationNode]()
     @State private var filter: LibraryFilter
     @State private var selectedGenre: Genre?
+    @AppStorage("hidesWatchedInLibrary") private var hidesWatched = false
     @State private var isPickingFile = false
     @State private var isAddingYouTubeVideo = false
     @State private var importErrorMessage: String?
@@ -95,13 +96,18 @@ struct LibraryView: View {
     /// and must be one card, which is the entire reason the insensitive key exists. Grouping by
     /// the raw name put the split the model had already healed straight back on screen.
     private var libraryItems: [LibraryItem] {
-        let videos = selectedGenre?.videos ?? allVideos
+        // Hiding applies to films only. A series is hidden when every episode is watched, not when
+        // some are — dropping a show from the library the moment you finish its first episode is
+        // the opposite of useful.
+        let unfiltered = selectedGenre?.videos ?? allVideos
+        let videos = hidesWatched ? unfiltered.filter { $0.isEpisode || !$0.isWatched } : unfiltered
         let showsByKey = Dictionary(grouping: shows, by: \.sortKey)
         let items: [LibraryItem] = switch filter {
         case .movies:
             videos.filter { !$0.isEpisode }.map(LibraryItem.movie)
         case .shows:
             Dictionary(grouping: videos.filter(\.isEpisode)) { Show.key(for: $0.showName ?? "") }
+                .filter { _, episodes in !hidesWatched || episodes.contains { !$0.isWatched } }
                 .map { key, episodes in
                     let name = episodes.first?.showName ?? ""
                     let title = showsByKey[key]?.first?.name ?? episodes.first?.name ?? name
@@ -192,6 +198,22 @@ struct LibraryView: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
+                // `.secondaryAction` folds into the overflow menu where there is one and does
+                // not exist on tvOS at all, so the placement is chosen per platform rather than
+                // the control being dropped from one.
+                #if os(tvOS)
+                ToolbarItem(placement: .automatic) {
+                    Toggle(isOn: $hidesWatched) {
+                        Label("Hide Watched", systemImage: "checkmark.circle")
+                    }
+                }
+                #else
+                ToolbarItem(placement: .secondaryAction) {
+                    Toggle(isOn: $hidesWatched) {
+                        Label("Hide Watched", systemImage: "checkmark.circle")
+                    }
+                }
+                #endif
                 // On macOS the sidebar already names the slice, so an in-content picker would
                 // say the same thing twice.
                 #if !os(macOS)

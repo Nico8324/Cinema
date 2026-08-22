@@ -188,6 +188,14 @@ struct DetailView: View {
                             isMatchingMetadata = true
                         }
                     }
+                    Button(video.isWatched ? "Mark as Unwatched" : "Mark as Watched",
+                           systemImage: video.isWatched ? "arrow.uturn.backward.circle" : "checkmark.circle") {
+                        // A person's own answer, kept where the app's guess would go. The app
+                        // infers watching from reaching the end or the credits, which is right
+                        // most of the time and wrong whenever you left it running in another room.
+                        video.isWatched ? video.markUnwatched() : video.markWatched()
+                        context.saveReportingErrors()
+                    }
                     Button("Delete Video", systemImage: "trash", role: .destructive) {
                         isConfirmingDelete = true
                     }

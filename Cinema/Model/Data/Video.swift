@@ -91,6 +91,14 @@ final class Video: Identifiable {
     var hasThumbnail: Bool = false
     /// How far into the video playback last stopped, in seconds. Drives the "Continue Watching" resume behavior.
     var playbackPosition: Double = 0
+    /// When this was watched to the end, or `nil` if it hasn't been.
+    ///
+    /// A date rather than a flag. "When" answers questions a boolean can't — which episode to
+    /// offer next, and what to show first — and it costs nothing extra to store. `nil` on an old
+    /// row means "not known to be watched" rather than "never watched": the app had no way to
+    /// record it before V10, and inferring a history from resume positions would mark every film
+    /// you abandoned half-way as one you finished.
+    var watchedAt: Date?
     /// When playback of this video was last updated — sorts the "Continue Watching" row by recency.
     var lastWatchedDate: Date?
 
@@ -238,8 +246,27 @@ extension Video {
 
     /// Whether the video has meaningful, unfinished playback progress worth offering to resume.
     /// Excludes videos just barely started (accidental taps) and videos essentially finished.
+    ///
+    /// A film marked watched is never offered to resume, even if it holds a stale position — being
+    /// told to continue something you have finished is the specific annoyance this exists to end.
     var isPartiallyWatched: Bool {
-        playbackPosition > 5 && playbackProgress < 0.95
+        watchedAt == nil && playbackPosition > 5 && playbackProgress < 0.95
+    }
+
+    var isWatched: Bool { watchedAt != nil }
+
+    /// Records that this was finished, and clears the resume position that no longer means
+    /// anything. One call so the two can't drift apart — a watched film holding a position is what
+    /// puts it back in Continue Watching.
+    func markWatched(at date: Date = .now) {
+        watchedAt = date
+        playbackPosition = 0
+    }
+
+    /// Undoes that, leaving the film exactly as if it had never been opened.
+    func markUnwatched() {
+        watchedAt = nil
+        playbackPosition = 0
     }
 
     /// Removes this video's files from disk: the imported media file and its thumbnail

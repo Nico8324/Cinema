@@ -22,10 +22,14 @@ import CoreMedia
 ///
 /// Its models are snapshotted below rather than the live classes — see the legacy V7 section.
 
-/// V9 adds `Video.userEditedMetadata`, so a title or synopsis corrected by hand survives every
-/// background metadata refresh instead of being silently re-clobbered by TMDB's version.
-enum CinemaSchemaV9: VersionedSchema {
-    static let versionIdentifier = Schema.Version(9, 0, 0)
+/// V10 adds `Video.watchedAt`, so the library knows what you have finished.
+///
+/// Until now a film that ended had its resume position cleared and became indistinguishable from
+/// one never opened — the only record of watching something was the fact that you were part-way
+/// through it. A date rather than a flag, because "when" answers questions a boolean cannot: what
+/// to offer next, and what to show first.
+enum CinemaSchemaV10: VersionedSchema {
+    static let versionIdentifier = Schema.Version(10, 0, 0)
 
     static var models: [any PersistentModel.Type] {
         [Video.self, Genre.self, UpNextItem.self, Show.self]
@@ -38,12 +42,12 @@ enum CinemaMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [CinemaSchemaV1.self, CinemaSchemaV2.self, CinemaSchemaV3.self, CinemaSchemaV4.self,
          CinemaSchemaV5.self, CinemaSchemaV6.self, CinemaSchemaV7.self, CinemaSchemaV8.self,
-         CinemaSchemaV9.self]
+         CinemaSchemaV9.self, CinemaSchemaV10.self]
     }
 
     static var stages: [MigrationStage] {
         [migrateV1toV2, migrateV2toV3, migrateV3toV4, migrateV4toV5, migrateV5toV6, migrateV6toV7,
-         migrateV7toV8, migrateV8toV9]
+         migrateV7toV8, migrateV8toV9, migrateV9toV10]
     }
 
     /// V1 → V2:
@@ -134,6 +138,123 @@ enum CinemaMigrationPlan: SchemaMigrationPlan {
         fromVersion: CinemaSchemaV8.self,
         toVersion: CinemaSchemaV9.self
     )
+
+    /// V9 → V10: adds the optional `watchedAt` date — additive only. Existing rows start `nil`,
+    /// which correctly says "not known to be watched" rather than "never watched": the app had no
+    /// way to record it before, and inventing a history from resume positions would mark every
+    /// film you abandoned as one you finished.
+    static let migrateV9toV10 = MigrationStage.lightweight(
+        fromVersion: CinemaSchemaV9.self,
+        toVersion: CinemaSchemaV10.self
+    )
+}
+
+// MARK: - Legacy schema V9
+
+/// The V9 schema shape, kept only so existing stores can migrate.
+/// Never reference these models outside the migration plan.
+///
+/// V9 added `Video.userEditedMetadata`, so a title corrected by hand survives a metadata refresh.
+/// Snapshotted the moment V10 changed the live classes, per the rule V7 taught the hard way: a
+/// version in a migration plan is a photograph of what was, never a live reference that changes
+/// underneath it.
+enum CinemaSchemaV9: VersionedSchema {
+    static let versionIdentifier = Schema.Version(9, 0, 0)
+
+    static var models: [any PersistentModel.Type] {
+        [Video.self, Genre.self, UpNextItem.self, Show.self]
+    }
+
+    @Model
+    final class Video {
+        @Relationship(inverse: \Genre.videos)
+        var genres: [Genre]
+
+        @Relationship(deleteRule: .cascade, inverse: \UpNextItem.video)
+        var upNextItem: UpNextItem?
+
+        var uuid: UUID = UUID()
+        var localFilename: String?
+
+        @Attribute(originalName: "url")
+        var remoteURL: URL?
+
+        var externalPath: String?
+        var name: String
+        var synopsis: String
+        var yearOfRelease: Int
+        var duration: Int
+        var contentRating: String
+        var dateAdded: Date = Date.distantPast
+        var tmdbID: Int?
+        var trailerYouTubeID: String?
+        var showName: String?
+        var show: Show?
+        var seasonNumber: Int?
+        var episodeNumber: Int?
+        var tmdbShowID: Int?
+        var episodeTitle: String?
+        var hasThumbnail: Bool = false
+        var hasPoster: Bool = false
+        var userEditedMetadata: Bool = false
+        var playbackPosition: Double = 0
+        var lastWatchedDate: Date?
+
+        init(name: String) {
+            self.genres = []
+            self.name = name
+            self.synopsis = ""
+            self.yearOfRelease = 2023
+            self.duration = 0
+            self.contentRating = "NR"
+        }
+    }
+
+    @Model
+    final class Genre {
+        @Relationship
+        var videos: [Video]
+
+        var name: String
+
+        init(name: String) {
+            self.videos = []
+            self.name = name
+        }
+    }
+
+    @Model
+    final class UpNextItem {
+        @Relationship(deleteRule: .nullify)
+        var video: Video?
+
+        var createdAt: Date
+
+        init(createdAt: Date = .now) {
+            self.createdAt = createdAt
+        }
+    }
+
+    @Model
+    final class Show {
+        #Index<Show>([\.sortKey])
+
+        var id: UUID = UUID()
+        var name: String = ""
+        var sortKey: String = ""
+        var tmdbShowID: Int?
+        var synopsis: String?
+        var firstAiredYear: Int?
+        var hasPoster: Bool = false
+        var dateAdded: Date = Date.now
+
+        @Relationship(deleteRule: .nullify, inverse: \Video.show)
+        var episodes: [Video]? = []
+
+        init(name: String) {
+            self.name = name
+        }
+    }
 }
 
 // MARK: - Legacy schema V8

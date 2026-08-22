@@ -198,8 +198,11 @@ enum Presentation {
                 // finishing must not clear the loaded movie's resume point.
                 guard let item = notification.object as? AVPlayerItem,
                       item === self.player.currentItem else { continue }
-                // A finished video has nothing left to "continue watching" — clear its saved position.
-                self.currentItem?.playbackPosition = 0
+                // Reaching the end is the one unambiguous signal that something was watched, so
+                // it is recorded rather than merely forgotten. Clearing the position alone — which
+                // is all this used to do — left a finished film indistinguishable from one never
+                // opened, and there was no other way the app could learn what you had seen.
+                self.currentItem?.markWatched()
                 self.modelContext.saveReportingErrors()
             }
         })
@@ -356,8 +359,17 @@ enum Presentation {
         let seconds = player.currentTime().seconds
         guard seconds.isFinite, seconds >= 0 else { return }
         lastSavedPlaybackTime = seconds
-        currentItem.playbackPosition = seconds
         currentItem.lastWatchedDate = Date()
+
+        // Reaching the end fires a notification; *stopping during the credits* fires nothing, and
+        // that is how most films are actually finished. Past 95% the film is over in every sense
+        // that matters, so it is recorded as watched rather than left looking abandoned five
+        // minutes from the end — which is exactly where a resume offer is least welcome.
+        if currentItem.duration > 0, seconds / Double(currentItem.duration) >= 0.95 {
+            currentItem.markWatched()
+        } else {
+            currentItem.playbackPosition = seconds
+        }
         modelContext.saveReportingErrors()
     }
 

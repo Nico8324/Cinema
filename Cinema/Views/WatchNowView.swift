@@ -22,9 +22,28 @@ struct WatchNowView: View {
     @Query(filter: #Predicate<Video> { $0.playbackPosition > 5 }, sort: \.lastWatchedDate, order: .reverse)
     private var recentlyPlayedVideos: [Video]
 
+    @Query private var shows: [Show]
+
     /// Videos with meaningful, unfinished progress, most recently watched first.
     private var continueWatchingVideos: [Video] {
         recentlyPlayedVideos.filter(\.isPartiallyWatched)
+    }
+
+    /// What to watch next: the episode each started series has reached, then anything added by
+    /// hand — and never something already offered as "Continue Watching".
+    ///
+    /// The two rows answer different questions. Continue Watching is "you are part-way through
+    /// this"; Up Next is "you have finished the last one, here is the following". Showing an
+    /// episode in both is the version of this feature that feels broken, so the row it already
+    /// belongs to wins.
+    private var upNextVideos: [Video] {
+        let continuing = Set(continueWatchingVideos.map(\.id))
+        let nextEpisodes = shows
+            .filter(\.isInProgress)
+            .compactMap(\.nextEpisode)
+            .sorted { ($0.lastWatchedDate ?? .distantPast) > ($1.lastWatchedDate ?? .distantPast) }
+        var seen = continuing
+        return (nextEpisodes + playlist.compactMap(\.video)).filter { seen.insert($0.id).inserted }
     }
 
     /// Which TMDB lists feed the discovery rows — the user picks them in Settings.
@@ -77,9 +96,9 @@ struct WatchNowView: View {
                                                   cardStyle: .half, namespace: namespace)
                                 }
 
-                                if !playlist.isEmpty {
+                                if !upNextVideos.isEmpty {
                                     VideoListView(title: "Up Next",
-                                                  videos: playlist.compactMap(\.video),
+                                                  videos: upNextVideos,
                                                   cardStyle: .half, namespace: namespace)
                                 }
 

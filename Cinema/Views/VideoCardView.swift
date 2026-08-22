@@ -63,6 +63,20 @@ struct VideoCardView: View {
         video.isPartiallyWatched ? video.playbackProgress : nil
     }
 
+    /// A finished film reads as finished at a glance. Without this the only visible difference
+    /// between something watched and something never opened is the absence of a progress bar —
+    /// which is also what "never opened" looks like.
+    @ViewBuilder private var watchedMark: some View {
+        if video.isWatched {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.title3)
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.white, .black.opacity(0.55))
+                .padding(8)
+                .accessibilityLabel(Text("Watched"))
+        }
+    }
+
     var body: some View {
         switch style {
         case .half:
@@ -70,6 +84,7 @@ struct VideoCardView: View {
                        showsTitle: artworkStyle == .wide)
                 .frame(width: cardWidth)
                 .clipShape(.rect(cornerRadius: Constants.cornerRadius))
+                .overlay(alignment: .topTrailing) { watchedMark }
                 #if os(iOS) || os(visionOS)
                 .hoverEffect()
                 #endif
@@ -79,6 +94,7 @@ struct VideoCardView: View {
                        showsTitle: artworkStyle == .wide)
                 .frame(width: Constants.upNextVideoCardWidth * artworkStyle.cardWidthScale)
                 .clipShape(.rect(cornerRadius: Constants.cornerRadius))
+                .overlay(alignment: .topTrailing) { watchedMark }
                 #if os(iOS) || os(visionOS)
                 .hoverEffect()
                 #endif
@@ -105,6 +121,7 @@ struct VideoCardView: View {
             #endif
             .frame(width: cardWidth)
             .clipShape(.rect(cornerRadius: Constants.cornerRadius))
+                .overlay(alignment: .topTrailing) { watchedMark }
 
         case .grid:
             PosterCard(video: video, title: video.displayName, progress: watchProgress)
